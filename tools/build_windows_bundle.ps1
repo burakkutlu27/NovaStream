@@ -3,13 +3,15 @@ NovaStream - Gömülü Python dağıtım paketi oluşturucu (Windows)
 
 NovaStream-App\runtime klasörüne python.org'un "embeddable" Python paketini kurar ve
 requirements.txt'deki kütüphaneleri (PyQt6, requests, yt-dlp, deno) içine yükler.
-Bundan sonra NovaStream, kullanıcının bilgisayarında Python kurulu olmasını gerektirmez.
+-IncludeFFmpeg parametresi verilirse FFmpeg Essentials sürümünü runtime\bin\ffmpeg.exe
+olarak indirip paketler (kullanıcıda ek FFmpeg kurulumu gerekmez).
 
 Kullanım (proje kök klasöründen):
-    powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1
+    powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1 [-IncludeFFmpeg]
 #>
 param(
-    [string[]]$PythonVersions = @("3.13.11", "3.13.10", "3.13.9", "3.13.8", "3.13.7", "3.13.5", "3.13.0")
+    [string[]]$PythonVersions = @("3.13.11", "3.13.10", "3.13.9", "3.13.8", "3.13.7", "3.13.5", "3.13.0"),
+    [switch]$IncludeFFmpeg
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -55,6 +57,21 @@ if ($LASTEXITCODE -ne 0) { throw "pip kurulamadi" }
 Write-Host "[*] Kutuphaneler kuruluyor (PyQt6, yt-dlp, deno)..."
 & (Join-Path $Runtime "python.exe") -m pip install --no-warn-script-location --disable-pip-version-check -r (Join-Path $App "requirements.txt")
 if ($LASTEXITCODE -ne 0) { throw "Kutuphaneler kurulamadi" }
+
+if ($IncludeFFmpeg) {
+    Write-Host "[*] FFmpeg Essentials indiriliyor (runtime\bin\ffmpeg.exe)..."
+    $ffZip = Join-Path $Tmp "ffmpeg-essentials.zip"
+    $ffTmp = Join-Path $Tmp "ffmpeg_extract"
+    if (Test-Path $ffTmp) { Remove-Item -Recurse -Force $ffTmp }
+    Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $ffZip -UseBasicParsing
+    Expand-Archive -Path $ffZip -DestinationPath $ffTmp -Force
+    $ffExe = Get-ChildItem -Path $ffTmp -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+    if (-not $ffExe) { throw "ffmpeg.exe arsivde bulunamadi" }
+    $binDir = Join-Path $Runtime "bin"
+    New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+    Copy-Item $ffExe.FullName -Destination (Join-Path $binDir "ffmpeg.exe") -Force
+    Write-Host "[OK] FFmpeg gomulu pakete eklendi: $(Join-Path $binDir 'ffmpeg.exe')"
+}
 
 & (Join-Path $Runtime "python.exe") -c "import PyQt6.QtWidgets, yt_dlp, requests; print('[OK] Gomulu Python hazir:', __import__('sys').version.split()[0])"
 if ($LASTEXITCODE -ne 0) { throw "Dogrulama basarisiz" }

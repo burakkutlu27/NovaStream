@@ -58,7 +58,21 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
-        if self.path.startswith("/range"):
+        if self.path.startswith("/ratelimit"):
+            counts = getattr(self.server, "rl_counts", None)
+            if counts is None:
+                counts = {}
+                self.server.rl_counts = counts
+            hits = counts.get(self.path, 0) + 1
+            counts[self.path] = hits
+            if hits in (1, 2, 4):
+                self.send_response(429)
+                self.send_header("Retry-After", "1")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self._range()
+        elif self.path.startswith("/range"):
             self._range(slow="slow" in self.path)
         elif self.path.startswith("/norange"):
             self._range(ignore_range=True)

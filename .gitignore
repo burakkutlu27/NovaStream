@@ -11,6 +11,7 @@ NovaStream-Kurulum-*.exe
 NovaStream_Setup_*.exe
 *.exe
 NovaStream-App/Output/
+NovaStream-App/browser_packages/
 dist/
 build/
 *.zip

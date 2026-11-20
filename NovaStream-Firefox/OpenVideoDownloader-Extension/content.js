@@ -1,4 +1,4 @@
-// NovaStream - Content Script (Yüzen Video İndirme HUD Widget'ı + DOM Medya Tarayıcı)
+// NovaStream - Content Script (Yüzen Video İndirme HUD Widget'ı + DOM Medya & Altyazı Tarayıcı)
 
 (function () {
   "use strict";
@@ -6,8 +6,6 @@
   if (window.__novastream_injected) return;
   window.__novastream_injected = true;
 
-  // Eklenti yeniden yüklendiğinde eski sekmelerdeki betik "Extension context invalidated"
-  // hatası fırlatır; bağlam geçersizse sessizce vazgeç.
   function extAlive() {
     try {
       return Boolean(chrome.runtime && chrome.runtime.id);
@@ -39,9 +37,13 @@
 
   let floatingButtonEnabled = true;
   let tabMediaItems = [];
+  let frameMediaItems = [];
+  let tabSubtitles = [];
+  let frameSubtitles = [];
   const activeDownloads = new Map();
   const videoOverlayMap = new Map(); // videoElement -> record
   const dismissedVideos = new WeakSet();
+  const reportedTrackUrls = new Set();
 
   // 1. Kullanıcı Tercihini (Yüzen Buton Açık/Kapalı) Yükle
   chrome.storage.local.get({ showFloatingButton: true }, (res) => {
@@ -49,17 +51,54 @@
     updateAllOverlays();
   });
 
-  // 2. Arka plandan mevcut medya listesini iste
+  // 2. Arka plandan mevcut medya ve altyazı listesini iste
   function queryTabMedia() {
     try {
       safeSendMessage({ type: "GET_MEDIA_FOR_TAB" }, (res) => {
         if (!res) return;
-        if (Array.isArray(res.media)) {
-          tabMediaItems = res.media;
-          updateAllOverlays();
-        }
+        if (Array.isArray(res.media)) tabMediaItems = res.media;
+        if (Array.isArray(res.frameMedia)) frameMediaItems = res.frameMedia;
+        if (Array.isArray(res.subtitles)) tabSubtitles = res.subtitles;
+        if (Array.isArray(res.frameSubtitles)) frameSubtitles = res.frameSubtitles;
+        updateAllOverlays();
       });
     } catch {}
+  }
+
+  // DOM içindeki <video><track src="..."> altyazılarını tara ve bildir
+  function scanVideoTracks() {
+    const found = [];
+    document.querySelectorAll("video track[src]").forEach((tr) => {
+      const kind = (tr.getAttribute("kind") || "").toLowerCase();
+      if (kind && kind !== "subtitles" && kind !== "captions") return;
+      const rawSrc = tr.getAttribute("src");
+      if (!rawSrc) return;
+      let absUrl = "";
+      try {
+        absUrl = new URL(rawSrc, window.location.href).href;
+      } catch {}
+      if (!absUrl || !/^https?:/i.test(absUrl) || reportedTrackUrls.has(absUrl)) return;
+      reportedTrackUrls.add(absUrl);
+      found.push({
+        url: absUrl,
+        label: tr.getAttribute("label") || "",
+        srclang: tr.getAttribute("srclang") || ""
+      });
+    });
+    if (found.length > 0) {
+      safeSendMessage({
+        type: "SUBTITLES_DETECTED",
+        tracks: found,
+        refererUrl: window.location.href
+      });
+    }
+  }
+
+  // Alt frame kapanırken / değişirken eski medya kayıtlarını temizle
+  if (window !== window.top) {
+    window.addEventListener("pagehide", () => {
+      safeSendMessage({ type: "FRAME_UNLOAD" });
+    });
   }
 
   // 3. Arka plan mesajlarını dinle
@@ -80,6 +119,15 @@
         tabMediaItems = msg.allItems;
       } else if (msg.item && !tabMediaItems.some((i) => i.url === msg.item.url)) {
         tabMediaItems.push(msg.item);
+      }
+      if (Array.isArray(msg.frameItems)) {
+        frameMediaItems = msg.frameItems;
+      }
+      if (Array.isArray(msg.subtitles)) {
+        tabSubtitles = msg.subtitles;
+      }
+      if (Array.isArray(msg.frameSubtitles)) {
+        frameSubtitles = msg.frameSubtitles;
       }
       updateAllOverlays();
     } else if (msg.type === "DOWNLOAD_PROGRESS") {
@@ -112,7 +160,6 @@
     }
   });
 
-  // Video çözünürlüğünü arka plana bildir
   function reportVideoDimensions(video) {
     if (!video) return;
     const w = video.videoWidth;
@@ -207,10 +254,21 @@
           color: #93c5fd;
           font-size: 9.5px;
           font-weight: 700;
-          padding: 1px 4px;
+          padding: 1px 5px;
           border-radius: 3px;
           text-transform: uppercase;
           letter-spacing: 0.2px;
+          flex-shrink: 0;
+        }
+        .badge-sub {
+          background: #064e3b;
+          color: #6ee7b7;
+          font-size: 9px;
+          font-weight: 700;
+          padding: 1px 5px;
+          border-radius: 3px;
+          text-transform: uppercase;
+          flex-shrink: 0;
         }
         .btn-chevron {
           display: flex;
@@ -246,7 +304,6 @@
           height: 11px;
         }
 
-        /* İlerleme Çubuğu */
         .progress-track {
           width: 100%;
           height: 2.5px;
@@ -273,19 +330,19 @@
           color: #ffffff;
         }
 
-        /* Kalite / Çözünürlük Menüsü */
+        /* Kalite / Çözünürlük & Altyazı Menüsü */
         .quality-menu {
           display: none;
           flex-direction: column;
           background: #181b22;
           border: 1px solid #2d3340;
-          border-radius: 4px;
-          padding: 4px;
-          min-width: 190px;
-          max-width: 280px;
-          max-height: 220px;
+          border-radius: 5px;
+          padding: 5px;
+          min-width: 245px;
+          max-width: 340px;
+          max-height: 280px;
           overflow-y: auto;
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
         }
         .quality-menu.show {
           display: flex;
@@ -295,15 +352,30 @@
           text-transform: uppercase;
           color: #8b949e;
           font-weight: 700;
-          padding: 3px 6px;
+          padding: 4px 6px;
           letter-spacing: 0.4px;
           border-bottom: 1px solid #272c37;
           margin-bottom: 3px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+        .menu-section-title {
+          font-size: 9px;
+          text-transform: uppercase;
+          color: #6ee7b7;
+          font-weight: 700;
+          padding: 5px 6px 3px 6px;
+          margin-top: 4px;
+          border-top: 1px solid #272c37;
+          letter-spacing: 0.4px;
         }
         .quality-item {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 10px;
           padding: 5px 6px;
           border-radius: 3px;
           font-size: 11px;
@@ -317,11 +389,47 @@
         .quality-item-left {
           display: flex;
           align-items: center;
-          gap: 5px;
+          gap: 6px;
+          min-width: 0;
+          flex: 1;
+        }
+        .item-label {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .quality-item-right {
           font-size: 10px;
           color: #8b949e;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .audio-pill-bar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          padding: 4px 6px 6px 6px;
+          margin-bottom: 3px;
+          border-bottom: 1px solid #272c37;
+        }
+        .audio-pill {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 7px;
+          border-radius: 3px;
+          background: #232834;
+          border: 1px solid #323949;
+          color: #cbd5e1;
+          cursor: pointer;
+          transition: background 0.1s, border-color 0.1s, color 0.1s;
+        }
+        .audio-pill:hover {
+          background: #2b3242;
+        }
+        .audio-pill.active {
+          background: #1e3a8a;
+          border-color: #3b82f6;
+          color: #dbeafe;
         }
       </style>
 
@@ -341,7 +449,7 @@
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           </span>
-          <span class="btn-dismiss" id="btn-dismiss" title="Kapatma Seçenekleri">
+          <span class="btn-dismiss" id="btn-dismiss" title="Bu videoda gizle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -354,7 +462,7 @@
         </div>
 
         <div class="quality-menu" id="quality-menu">
-          <div class="menu-title">Çözünürlük Seçin</div>
+          <div class="menu-title" id="menu-title">Çözünürlük Seçin</div>
           <div id="quality-list"></div>
         </div>
       </div>
@@ -373,13 +481,13 @@
       progTrack: shadow.getElementById("prog-track"),
       progFill: shadow.getElementById("prog-fill"),
       qualityMenu: shadow.getElementById("quality-menu"),
+      menuTitle: shadow.getElementById("menu-title"),
       qualityList: shadow.getElementById("quality-list"),
       currentDownloadId: null,
       isDownloading: false,
       fadeTimeout: null
     };
 
-    // Tek Tıkla Gizleme (Kalıcı kapatmak isteyen eklenti popup'ındaki switch'i kullanır)
     elements.btnDismiss.addEventListener("click", (e) => {
       e.stopPropagation();
       dismissedVideos.add(video);
@@ -388,12 +496,12 @@
       host.style.pointerEvents = "none";
     });
 
-    // Ana Buton Tıklaması
     elements.mainPill.addEventListener("click", (e) => {
       e.stopPropagation();
       if (elements.isDownloading) return;
 
       const items = getApplicableMedia(video);
+      const subs = getApplicableSubtitles();
 
       if (isYouTube) {
         startDownload({
@@ -405,15 +513,20 @@
         return;
       }
 
-      // Master playlist kaliteleri var mı?
-      const masterItem = items.find((it) => Array.isArray(it.qualities) && it.qualities.length > 1);
-      if (masterItem) {
-        toggleQualityMenu(elements, masterItem.qualities, masterItem);
+      const multiOptionItem = items.find(
+        (it) => (Array.isArray(it.qualities) && it.qualities.length > 1) ||
+                (Array.isArray(it.audioTracks) && it.audioTracks.length > 1)
+      );
+      if (multiOptionItem && items.length === 1) {
+        const quals = Array.isArray(multiOptionItem.qualities) && multiOptionItem.qualities.length > 0
+          ? multiOptionItem.qualities
+          : [{ url: multiOptionItem.targetUrl || multiOptionItem.url, qualityLabel: multiOptionItem.resolution || "HD", height: 0, hasExternalAudio: Boolean(multiOptionItem.hasExternalAudio) }];
+        toggleQualityMenu(elements, quals, multiOptionItem, subs);
         return;
       }
 
-      if (items.length > 1) {
-        toggleMultipleMediaMenu(elements, items);
+      if (items.length > 1 || (items.length === 1 && subs.length > 0)) {
+        toggleMultipleMediaMenu(elements, items, false, subs);
         return;
       }
 
@@ -433,7 +546,6 @@
       }
     });
 
-    // Hover Mantığı
     function getPlayerContainer(v) {
       return (
         v.closest("#movie_player, .html5-video-player, .player-container, .video-js, .jwplayer, [class*='player' i]") ||
@@ -453,17 +565,11 @@
 
     function scheduleHide(delay = 2000) {
       clearTimeout(elements.fadeTimeout);
-      if (
-        elements.isDownloading ||
-        elements.qualityMenu.classList.contains("show")
-      ) {
+      if (elements.isDownloading || elements.qualityMenu.classList.contains("show")) {
         return;
       }
       elements.fadeTimeout = setTimeout(() => {
-        if (
-          !elements.isDownloading &&
-          !elements.qualityMenu.classList.contains("show")
-        ) {
+        if (!elements.isDownloading && !elements.qualityMenu.classList.contains("show")) {
           host.style.opacity = "0";
           host.style.pointerEvents = "none";
           host.style.transform = "translateY(-2px)";
@@ -481,33 +587,79 @@
     host.addEventListener("mouseenter", showOverlay);
     host.addEventListener("mouseleave", () => scheduleHide(1200));
 
-    // Video olaylarını dinle (çözünürlüğü bildir)
-    video.addEventListener("loadedmetadata", () => reportVideoDimensions(video), { passive: true });
-    video.addEventListener("play", () => reportVideoDimensions(video), { passive: true });
+    video.addEventListener("loadedmetadata", () => {
+      reportVideoDimensions(video);
+      scanVideoTracks();
+    }, { passive: true });
+    video.addEventListener("play", () => {
+      reportVideoDimensions(video);
+      scanVideoTracks();
+    }, { passive: true });
     reportVideoDimensions(video);
+    scanVideoTracks();
 
     const record = { video, host, elements, playerContainer };
     videoOverlayMap.set(video, record);
     return record;
   }
 
-  // Master Playlist Çözünürlük Menüsü
-  function toggleQualityMenu(elements, qualities, parentItem) {
+  function appendSubtitlesToMenu(elements, subs) {
+    if (!subs || subs.length === 0) return;
+    const sec = document.createElement("div");
+    sec.className = "menu-section-title";
+    sec.textContent = "Altyazılar (.SRT)";
+    elements.qualityList.appendChild(sec);
+
+    subs.forEach((sub) => {
+      const row = document.createElement("div");
+      row.className = "quality-item";
+      row.title = sub.url;
+      row.innerHTML = `
+        <div class="quality-item-left">
+          <span class="badge-sub">${escapeHtml(sub.langCode || "ALT")}</span>
+          <span class="item-label">${escapeHtml(sub.label || "Altyazı")}</span>
+        </div>
+        <div class="quality-item-right">${escapeHtml(sub.sourceLabel || "SRT")}</div>
+      `;
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        elements.qualityMenu.classList.remove("show");
+        elements.btnChevron.classList.remove("open");
+        startSubtitleDownload(sub, elements);
+      });
+      elements.qualityList.appendChild(row);
+    });
+  }
+
+  // Master Playlist Çözünürlük & Ses Dili Menüsü
+  function toggleQualityMenu(elements, qualities, parentItem, subs = []) {
     const isShowing = elements.qualityMenu.classList.contains("show");
     if (isShowing) {
       elements.qualityMenu.classList.remove("show");
       elements.btnChevron.classList.remove("open");
-    } else {
-      elements.qualityList.innerHTML = "";
-      qualities.forEach((q) => {
+      return;
+    }
+
+    const srcTag = parentItem.sourceLabel ? ` • ${parentItem.sourceLabel}` : "";
+    const audios = Array.isArray(parentItem.audioTracks) ? parentItem.audioTracks : [];
+    const hasMultiAudio = audios.length > 1;
+    const hasMultiQuality = qualities.length > 1;
+
+    elements.qualityList.innerHTML = "";
+
+    if (hasMultiAudio && !hasMultiQuality) {
+      elements.menuTitle.textContent = `Ses & İndirme Seçin${srcTag}`;
+      const q = qualities[0] || { url: parentItem.targetUrl || parentItem.url, qualityLabel: parentItem.resolution || "HD", height: 0 };
+      audios.forEach((a) => {
         const row = document.createElement("div");
         row.className = "quality-item";
+        row.title = parentItem.masterUrl || parentItem.url;
         row.innerHTML = `
           <div class="quality-item-left">
-            <span class="badge-res">${escapeHtml(q.qualityLabel)}</span>
-            <span>${escapeHtml(q.bwLabel || "")}</span>
+            <span class="badge-res">${escapeHtml(q.qualityLabel || parentItem.resolution || "HD")}</span>
+            <span class="item-label">${escapeHtml(a.label || a.rawName || "Ses")}</span>
           </div>
-          <div class="quality-item-right">MP4</div>
+          <div class="quality-item-right">${escapeHtml((a.language || "SES").toUpperCase())}</div>
         `;
         row.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -516,6 +668,12 @@
           startDownload({
             id: crypto.randomUUID(),
             url: q.url,
+            masterUrl: parentItem.masterUrl || parentItem.url,
+            hasExternalAudio: true,
+            quality: q.height ? String(q.height) : "best",
+            audioLang: a.language || "",
+            audioName: a.rawName || a.name || "",
+            refererUrl: parentItem.refererUrl || window.location.href,
             title: parentItem.title,
             format: q.qualityLabel,
             isStream: true
@@ -523,53 +681,172 @@
         });
         elements.qualityList.appendChild(row);
       });
-      elements.qualityMenu.classList.add("show");
-      elements.btnChevron.classList.add("open");
-    }
-  }
 
-  function toggleMultipleMediaMenu(elements, items, showMinor = false) {
-    const isShowing = elements.qualityMenu.classList.contains("show");
-    if (isShowing && !showMinor) {
-      elements.qualityMenu.classList.remove("show");
-      elements.btnChevron.classList.remove("open");
+      const dualRow = document.createElement("div");
+      dualRow.className = "quality-item";
+      dualRow.title = "Tüm ses dillerini tek dosyada birleştirir";
+      dualRow.innerHTML = `
+        <div class="quality-item-left">
+          <span class="badge-res">${escapeHtml(q.qualityLabel || parentItem.resolution || "HD")}</span>
+          <span class="item-label">Çift Ses (Tüm Diller)</span>
+        </div>
+        <div class="quality-item-right">MP4</div>
+      `;
+      dualRow.addEventListener("click", (e) => {
+        e.stopPropagation();
+        elements.qualityMenu.classList.remove("show");
+        elements.btnChevron.classList.remove("open");
+        startDownload({
+          id: crypto.randomUUID(),
+          url: q.url,
+          masterUrl: parentItem.masterUrl || parentItem.url,
+          hasExternalAudio: true,
+          quality: q.height ? String(q.height) : "best",
+          audioLang: "all",
+          audioName: "",
+          refererUrl: parentItem.refererUrl || window.location.href,
+          title: parentItem.title,
+          format: q.qualityLabel,
+          isStream: true
+        }, elements);
+      });
+      elements.qualityList.appendChild(dualRow);
     } else {
-      elements.qualityList.innerHTML = "";
-      const minorItems = tabMediaItems.filter((it) => it.minor && !items.includes(it));
-      const shown = showMinor ? items.concat(minorItems) : items;
-      shown.forEach((item) => {
+      elements.menuTitle.textContent = hasMultiAudio ? `Çözünürlük & Ses Seçin${srcTag}` : `Çözünürlük Seçin${srcTag}`;
+      let selectedAudio = audios.find((a) => a.isDefault) || audios[0] || null;
+
+      if (hasMultiAudio) {
+        const bar = document.createElement("div");
+        bar.className = "audio-pill-bar";
+        const choices = audios.map((a) => ({ label: a.label || a.rawName || "Ses", language: a.language || "", rawName: a.rawName || a.name || "" }));
+        choices.push({ label: "Çift Ses", language: "all", rawName: "" });
+
+        choices.forEach((ch, idx) => {
+          const pill = document.createElement("span");
+          const isDef = selectedAudio ? (ch.language === selectedAudio.language && ch.rawName === (selectedAudio.rawName || selectedAudio.name || "")) : idx === 0;
+          pill.className = `audio-pill${isDef ? " active" : ""}`;
+          pill.textContent = ch.label;
+          pill.addEventListener("click", (e) => {
+            e.stopPropagation();
+            selectedAudio = ch;
+            bar.querySelectorAll(".audio-pill").forEach((el) => el.classList.remove("active"));
+            pill.classList.add("active");
+          });
+          bar.appendChild(pill);
+        });
+        elements.qualityList.appendChild(bar);
+      }
+
+      qualities.forEach((q) => {
         const row = document.createElement("div");
         row.className = "quality-item";
-        const resText = item.resolution || item.format || "MP4";
+        row.title = q.url;
+        const rightTag = q.hasExternalAudio ? "Ses+Video" : "MP4";
         row.innerHTML = `
           <div class="quality-item-left">
-            <span class="badge-res">${escapeHtml(resText)}</span>
-            <span>${escapeHtml(item.title.substring(0, 20))}...</span>
+            <span class="badge-res">${escapeHtml(q.qualityLabel)}</span>
+            <span class="item-label">${escapeHtml(q.bwLabel || (parentItem.sourceLabel || "Akış"))}</span>
           </div>
-          <div class="quality-item-right">${escapeHtml(item.sizeFormatted || "")}</div>
+          <div class="quality-item-right">${escapeHtml(rightTag)}</div>
         `;
         row.addEventListener("click", (e) => {
           e.stopPropagation();
           elements.qualityMenu.classList.remove("show");
           elements.btnChevron.classList.remove("open");
-          startDownload(item, elements);
+          startDownload({
+            id: crypto.randomUUID(),
+            url: q.url,
+            masterUrl: parentItem.masterUrl || parentItem.url,
+            hasExternalAudio: Boolean(q.hasExternalAudio || parentItem.hasExternalAudio),
+            quality: q.height ? String(q.height) : "best",
+            audioLang: selectedAudio ? selectedAudio.language : null,
+            audioName: selectedAudio ? (selectedAudio.rawName || selectedAudio.name || "") : null,
+            refererUrl: parentItem.refererUrl || window.location.href,
+            title: parentItem.title,
+            format: q.qualityLabel,
+            isStream: true
+          }, elements);
         });
         elements.qualityList.appendChild(row);
       });
-      if (!showMinor && minorItems.length > 0) {
-        const more = document.createElement("div");
-        more.className = "quality-item";
-        more.innerHTML = `<div class="quality-item-left"><span>Diğer ${minorItems.length} kısa öğe (reklam/parça olabilir)</span></div>`;
-        more.style.opacity = "0.7";
-        more.addEventListener("click", (e) => {
-          e.stopPropagation();
-          toggleMultipleMediaMenu(elements, items, true);
-        });
-        elements.qualityList.appendChild(more);
-      }
-      elements.qualityMenu.classList.add("show");
-      elements.btnChevron.classList.add("open");
     }
+
+    appendSubtitlesToMenu(elements, subs);
+    elements.qualityMenu.classList.add("show");
+    elements.btnChevron.classList.add("open");
+  }
+
+  function formatStreamDescriptor(item) {
+    const parts = [];
+    parts.push(item.sourceLabel || "Video");
+    if (item.hasExternalAudio) parts.push("Ses+Video");
+    else if (item.isStream) parts.push("HLS");
+    else if (item.ext) parts.push(item.ext.toUpperCase());
+    return parts.join(" • ");
+  }
+
+  function toggleMultipleMediaMenu(elements, items, showMinor = false, subs = []) {
+    const isShowing = elements.qualityMenu.classList.contains("show");
+    if (isShowing && !showMinor) {
+      elements.qualityMenu.classList.remove("show");
+      elements.btnChevron.classList.remove("open");
+      return;
+    }
+
+    elements.menuTitle.textContent = items.length > 1 ? "Video / Akış Seçin" : "İndirme Seçenekleri";
+    elements.qualityList.innerHTML = "";
+    const basePool = frameMediaItems.length > 0 ? frameMediaItems : tabMediaItems;
+    const minorItems = basePool.filter((it) => it.minor && !items.includes(it));
+    const shown = showMinor ? items.concat(minorItems) : items;
+
+    shown.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "quality-item";
+      row.title = item.url;
+      const resText = item.resolution || item.format || "MP4";
+      const leftDesc = formatStreamDescriptor(item);
+      const rightMeta = item.sizeFormatted || (item.isStream ? "HLS" : "");
+      row.innerHTML = `
+        <div class="quality-item-left">
+          <span class="badge-res">${escapeHtml(resText)}</span>
+          <span class="item-label">${escapeHtml(leftDesc)}</span>
+        </div>
+        <div class="quality-item-right">${escapeHtml(rightMeta)}</div>
+      `;
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const hasQ = Array.isArray(item.qualities) && item.qualities.length > 1;
+        const hasA = Array.isArray(item.audioTracks) && item.audioTracks.length > 1;
+        if (hasQ || hasA) {
+          elements.qualityMenu.classList.remove("show");
+          const quals = hasQ
+            ? item.qualities
+            : [{ url: item.targetUrl || item.url, qualityLabel: item.resolution || "HD", height: 0, hasExternalAudio: Boolean(item.hasExternalAudio || hasA) }];
+          toggleQualityMenu(elements, quals, item, subs);
+          return;
+        }
+        elements.qualityMenu.classList.remove("show");
+        elements.btnChevron.classList.remove("open");
+        startDownload(item, elements);
+      });
+      elements.qualityList.appendChild(row);
+    });
+
+    if (!showMinor && minorItems.length > 0) {
+      const more = document.createElement("div");
+      more.className = "quality-item";
+      more.innerHTML = `<div class="quality-item-left"><span class="item-label">Diğer ${minorItems.length} kısa öğe (reklam/parça olabilir)</span></div>`;
+      more.style.opacity = "0.7";
+      more.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleMultipleMediaMenu(elements, items, true, subs);
+      });
+      elements.qualityList.appendChild(more);
+    }
+
+    appendSubtitlesToMenu(elements, subs);
+    elements.qualityMenu.classList.add("show");
+    elements.btnChevron.classList.add("open");
   }
 
   function extractFromVideoTag(video) {
@@ -580,6 +857,7 @@
       return {
         id: crypto.randomUUID(),
         url: src,
+        refererUrl: window.location.href,
         title: (document.title || "video").replace(/[^\w\.-]/g, "_") + ".mp4",
         format: res,
         resolution: res,
@@ -603,14 +881,50 @@
       }];
     }
 
-    if (tabMediaItems.length > 0) {
-      // Arka plan listeyi sıralar; kısa parçalar/reklamlar "minor" olarak gelir.
-      const main = tabMediaItems.filter((it) => !it.minor && !it.duplicate);
-      return main.length > 0 ? main : tabMediaItems;
+    const pool = frameMediaItems.length > 0 ? frameMediaItems : tabMediaItems;
+    if (pool.length > 0) {
+      const main = pool.filter((it) => !it.minor && !it.duplicate);
+      return main.length > 0 ? main : pool;
     }
 
     const fallback = extractFromVideoTag(video);
     return fallback ? [fallback] : [];
+  }
+
+  function getApplicableSubtitles() {
+    if (isYouTube) return [];
+    return frameSubtitles.length > 0 ? frameSubtitles : tabSubtitles;
+  }
+
+  function startSubtitleDownload(sub, elements) {
+    elements.pillLabel.textContent = "Altyazı indiriliyor...";
+    elements.host.style.opacity = "1";
+    safeSendMessage({
+      type: "DOWNLOAD_SUBTITLE",
+      url: sub.url,
+      refererUrl: sub.refererUrl || window.location.href,
+      title: sub.title || document.title || "altyazi",
+      langCode: sub.langCode || "",
+      ext: sub.ext || "vtt",
+      isHlsSubtitle: Boolean(sub.isHlsSubtitle),
+      convertToSrt: true
+    }, (res) => {
+      if (res?.success) {
+        elements.mainPill.classList.add("success");
+        elements.pillLabel.textContent = "Altyazı kaydedildi";
+        setTimeout(() => {
+          elements.mainPill.classList.remove("success");
+          elements.pillLabel.textContent = "İndir";
+        }, 2500);
+      } else {
+        elements.mainPill.classList.add("error");
+        elements.pillLabel.textContent = "Altyazı hatası";
+        setTimeout(() => {
+          elements.mainPill.classList.remove("error");
+          elements.pillLabel.textContent = "İndir";
+        }, 2500);
+      }
+    });
   }
 
   function startDownload(item, elements) {
@@ -631,19 +945,22 @@
     safeSendMessage({
       type: msgType,
       id: downloadId,
-      url: item.url,
-      streamUrl: item.url,
-      refererUrl: window.location.href,
+      url: item.targetUrl || item.url,
+      streamUrl: item.targetUrl || item.url,
+      masterUrl: item.masterUrl || (item.isMaster ? item.url : ""),
+      hasExternalAudio: Boolean(item.hasExternalAudio),
+      quality: item.quality || null,
+      audioLang: item.audioLang || null,
+      audioName: item.audioName || null,
+      refererUrl: item.refererUrl || window.location.href,
       title: item.title,
       isYouTube: Boolean(item.isYouTube),
       isStream: Boolean(item.isStream)
     }, (res) => {
       if (res?.success && res.desktop && res.tracking) {
-        // Uygulamaya devredildi; ilerleme uygulamadan okunup bu düğmede gösterilecek.
         return;
       }
       if (res?.success && res.desktop) {
-        // İndirme masaüstü uygulamasına devredildi (onay penceresi); ilerleme orada izlenir.
         elements.isDownloading = false;
         elements.mainPill.classList.add("success");
         elements.pillLabel.textContent = "NovaStream'e aktarıldı";
@@ -792,11 +1109,12 @@
       return;
     }
 
-    // Normal Durum: Çözünürlük Rozeti Belirleme
     const items = getApplicableMedia(video);
+    const subs = getApplicableSubtitles();
     const hasMultipleQualities = items.some((it) => Array.isArray(it.qualities) && it.qualities.length > 1);
+    const hasMultipleAudios = items.some((it) => Array.isArray(it.audioTracks) && it.audioTracks.length > 1);
 
-    if (hasMultipleQualities || items.length > 1) {
+    if (hasMultipleQualities || hasMultipleAudios || items.length > 1 || (items.length === 1 && subs.length > 0)) {
       elements.btnChevron.style.display = "inline-flex";
     } else {
       elements.btnChevron.style.display = "none";
@@ -859,6 +1177,7 @@
     if (!ticking) {
       ticking = true;
       requestAnimationFrame(() => {
+        scanVideoTracks();
         updateAllOverlays();
         ticking = false;
       });
@@ -884,10 +1203,12 @@
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
+      scanVideoTracks();
       queryTabMedia();
       scheduleUpdate();
     }, { once: true });
   } else {
+    scanVideoTracks();
     queryTabMedia();
     scheduleUpdate();
   }

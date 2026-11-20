@@ -2,6 +2,25 @@
 
 Bu projedeki tüm önemli değişiklikler bu dosyada belgelenir.
 
+## [v2.5.0] - 2026-11-20
+
+### Eklenti & Video Yakalama İyileştirmeleri (`NovaStream-v2` & `NovaStream-Firefox`)
+- **Rapidrame / Close iframe uyumluluğu:** `webRequest.onBeforeSendHeaders` (Chrome `extraHeaders` + Firefox uyumlu geri dönüş) ile gerçek iframe `Referer`/`Origin` bilgisi yakalanıp `withScopedHeaders` ile uygulanır.
+- **HTTP 429 hız sınırı koruması:** Aynı sunucuya yapılan playlist incelemeleri host başına sıraya alındı (200 ms aralık + `120 sn` önbellek + `Retry-After` soğuma süresi). Segment indirmede eşzamanlılık `4 -> 2 -> 1` adaptif düşüş ve üstel bekleme eklendi.
+- **Temiz ve anlaşılır medya listesi:** `#EXT-X-MEDIA` ses/altyazı alt listeleri `tabKnownSubstreams` ve yarış-durumu temizliğiyle sahte `[HD]` kaydı olarak çıkmaz. Aynı iframe'de master playlist varsa belirsiz yalın HLS kayıtları bastırılır; kaynak etiketi (`Rapidrame`, `Close`, vb.), bit hızı ve süre açıkça gösterilir.
+- **Altyazı yakalama ve `.srt` dönüştürme:** `.vtt`/`.srt`/`.ass`/`.ttml` dosyaları, `<video><track>` öğeleri ve HLS WebVTT altyazı listeleri yakalanır; WebVTT akışları otomatik `.srt` biçimine dönüştürülüp masaüstü köprüsü (`/api/save_subtitle`) veya tarayıcı üzerinden indirilir.
+
+### Masaüstü Uygulaması (`NovaStream-App`)
+- **HTTP 429 direnci (`core/engine.py`, `core/stream_handler.py`):** `SegmentedDownloader` HTTP `429`/`503` yanıtlarında `Retry-After` destekli bekleme uygular ve bağlantı sayısını dinamik azaltır; `yt-dlp` tarafında HLS için `-N 4` ve `--retry-sleep` etkinleştirildi.
+- **Çoklu seçim ve Tümünü Seç (`ui/main_window.py`, `core/queue_manager.py`):** 9 sütunlu tabloda onay kutuları (`☐`/`☑`), `ExtendedSelection`, **Tümünü Seç** düğmesi, `Ctrl+A` / `Delete` / `Escape` kısayolları ve toplu duraklat/devam/URL kopyala/sil işlemleri eklendi.
+- **Altyazı ayarları (`ui/download_dialog.py`, `ui/settings_dialog.py`, `core/bridge_server.py`):** Video ile birlikte otomatik altyazı indirme (`.srt`), dil tercihi (`tr,en`) ve `/api/save_subtitle` uç noktası eklendi.
+
+### Paketleme, Tarayıcı Algılama & Otomatik Release
+- **Tarayıcı algılama ve eklenti paketleme (`core/browser_setup.py`, `core/native_messaging.py`, `tools/package_extensions.py`):** `.zip`, CRX3 (`.crx`) ve `.xpi` paketleme; Chrome, Edge, Brave, Opera, Vivaldi, Chromium, Firefox, Firefox Dev, LibreWolf ve Waterfox için algılama, profil yerleştirme ve tek tıkla klasör/dosya rehberliği eklendi.
+- **Belgeler ve Release hattı:** Detaylı [BENI-OKU.txt](BENI-OKU.txt), [KULLANIM-KILAVUZU.txt](KULLANIM-KILAVUZU.txt), [RELEASE_NOTES.md](RELEASE_NOTES.md) ve otomatik GitHub Releases iş akışı (`.github/workflows/release.yml`) eklendi.
+
+---
+
 ## [v2.4.3] - 2026-11-20
 
 İlk GitHub sürümü ve kararlı temel paket.

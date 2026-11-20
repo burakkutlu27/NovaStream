@@ -15,10 +15,12 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from core.engine import choose_target_path, sanitize_filename
+
 PORT = 9191
-APP_VERSION = "2.4.3"
+APP_VERSION = "2.5.0"
 ALLOWED_ORIGIN_PREFIXES = ("chrome-extension://", "moz-extension://", "extension://", "safari-web-extension://")
-MAX_BODY = 1024 * 1024
+MAX_BODY = 5 * 1024 * 1024
 
 
 def origin_allowed(origin):
@@ -119,6 +121,8 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         try:
             if self.path == "/api/download":
                 self._handle_download(data)
+            elif self.path == "/api/save_subtitle":
+                self._handle_save_subtitle(data)
             elif self.path == "/api/task_progress":
                 self._handle_progress(data)
             elif self.path == "/api/control":
@@ -152,10 +156,34 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             is_youtube=bool(data.get("isYouTube", False)),
             referer=data.get("referer"),
             quality=data.get("quality"),
+            audio_lang=data.get("audioLang"),
+            audio_name=data.get("audioName"),
+            download_subtitles=bool(data.get("downloadSubtitles", qm.settings.get("download_subtitles", False))),
             auto_start=bool(data.get("autoStart", True)),
             cookie_text=self._cookie_text(data)
         )
         self._json(200, {"success": True, "id": task.id, "desktop": True})
+
+    def _handle_save_subtitle(self, data):
+        content = data.get("content")
+        if not isinstance(content, str) or not content.strip():
+            self._json(400, {"error": "Geçerli altyazı içeriği gerekli"})
+            return
+        qm = self.bridge.queue_manager
+        dest_dir = qm.download_dir() if qm else os.path.expanduser("~/Downloads")
+        os.makedirs(dest_dir, exist_ok=True)
+        raw_name = sanitize_filename(data.get("filename") or "altyazi.srt", fallback="altyazi.srt")
+        base, ext = os.path.splitext(raw_name)
+        if ext.lower() not in (".srt", ".vtt", ".ass", ".ssa"):
+            raw_name = f"{base or 'altyazi'}.srt"
+        target_path = choose_target_path(dest_dir, raw_name)
+        with open(target_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(content)
+        self._json(200, {
+            "success": True,
+            "filename": os.path.basename(target_path),
+            "path": target_path
+        })
 
     @staticmethod
     def _cookie_text(data):
@@ -199,10 +227,14 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             task.title = task.filename = title
             task.category = categorize_file(title, is_stream=True)
 
+        status = data.get("status")
         pct = data.get("percent")
         if pct is not None:
             try:
-                task.percent = float(pct)
+                new_pct = float(pct)
+                if status == "downloading" and task.status == "downloading" and task.percent < 100.0 and new_pct < task.percent:
+                    new_pct = task.percent
+                task.percent = new_pct
             except (TypeError, ValueError):
                 pass
         if data.get("speedMb") is not None:
@@ -210,7 +242,6 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         if data.get("eta") is not None:
             task.eta = str(data["eta"])
 
-        status = data.get("status")
         if data.get("error") or status == "error":
             task.status = "error"
             task.error_message = data.get("error") or "Tarayıcı indirmesi başarısız oldu"

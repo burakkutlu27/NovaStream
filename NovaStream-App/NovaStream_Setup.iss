@@ -1,9 +1,10 @@
 ; NovaStream Windows Inno Setup betigi
-; Once gomulu Python paketini olusturun:  powershell -ExecutionPolicy Bypass -File ..\tools\build_windows_bundle.ps1
+; Once gomulu Python paketini olusturun:  powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1 -IncludeFFmpeg
+; Istege bagli paketli eklentiler:        python tools\package_extensions.py --out NovaStream-App\browser_packages --with-id-name
 ; Sonra bu dosyayi Inno Setup Compiler ile derleyin. Kullanicinin bilgisayarinda Python gerekmez.
 
 #define MyAppName "NovaStream"
-#define MyAppVersion "2.4.3"
+#define MyAppVersion "2.5.0"
 #define MyAppPublisher "NovaStream"
 
 [Setup]
@@ -28,12 +29,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "browserintegration"; Description: "Chrome, Edge, Brave ve Firefox tarayici koprulerini kaydet"; GroupDescription: "Entegrasyonlar:"
+Name: "browserintegration"; Description: "Algilanan tarayicilara kopru ve eklenti paketlerini kur"; GroupDescription: "Entegrasyonlar:"
 
 [Files]
 Source: "main.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "run_windows.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\BENI-OKU.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\KULLANIM-KILAVUZU.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "core\*.py"; DestDir: "{app}\core"; Flags: ignoreversion
 Source: "ui\*.py"; DestDir: "{app}\ui"; Flags: ignoreversion
 Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -42,14 +45,15 @@ Source: "..\NovaStream-v2\native_host.py"; DestDir: "{app}\browser"; Flags: igno
 Source: "..\NovaStream-v2\native_host.bat"; DestDir: "{app}\browser"; Flags: ignoreversion
 Source: "..\NovaStream-v2\OpenVideoDownloader-Extension\*"; DestDir: "{app}\browser\chrome"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\NovaStream-Firefox\OpenVideoDownloader-Extension\*"; DestDir: "{app}\browser\firefox"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "browser_packages\*"; DestDir: "{app}\browser\packages"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\main.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\main.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"; Tasks: desktopicon
 
 [Run]
-; Tarayici koprusu kaydi (kayit defteri + manifest dosyalari)
-Filename: "{app}\runtime\python.exe"; Parameters: """{app}\core\native_messaging.py"" ""{app}\browser"""; Flags: runhidden; Tasks: browserintegration
+; Tarayici koprusu kaydi + otomatik paket/profil yerlestirme
+Filename: "{app}\runtime\python.exe"; Parameters: """{app}\core\browser_setup.py"" ""{app}\browser"""; Flags: runhidden; Tasks: browserintegration
 Filename: "{app}\runtime\pythonw.exe"; Parameters: """{app}\main.py"""; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]

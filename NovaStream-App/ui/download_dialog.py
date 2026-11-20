@@ -7,7 +7,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFileDialog, QComboBox, QFrame
+    QPushButton, QFileDialog, QComboBox, QFrame, QCheckBox
 )
 from core.engine import get_default_download_dir
 from core.queue_manager import categorize_file, QUALITY_CHOICES
@@ -87,6 +87,11 @@ class DownloadDialog(QDialog):
         self.quality_combo.setCurrentIndex(max(0, q_idx))
         self.quality_row.addWidget(self.quality_combo)
         layout.addLayout(self.quality_row)
+
+        self.sub_chk = QCheckBox("Altyazıları da indir (TR/EN, SRT)")
+        self.sub_chk.setChecked(bool(self.info.get("download_subtitles", self.info.get("default_subtitles", False))))
+        layout.addWidget(self.sub_chk)
+
         self._update_quality_visibility(self.url_input.text())
         if self.url_input.text() and not self.filename_input.text():
             self.on_url_changed(self.url_input.text())
@@ -129,6 +134,8 @@ class DownloadDialog(QDialog):
     def _update_quality_visibility(self, text):
         show = bool(self.info.get("isStream") or self.info.get("isYouTube") or self.is_video_url(text))
         self.quality_combo.setVisible(show)
+        if hasattr(self, "sub_chk"):
+            self.sub_chk.setVisible(show)
         for i in range(self.quality_row.count()):
             w = self.quality_row.itemAt(i).widget()
             if w:
@@ -164,6 +171,7 @@ class DownloadDialog(QDialog):
             "url": url,
             "title": self.filename_input.text().strip(),
             "quality": self.quality_combo.currentData() if is_video else None,
+            "download_subtitles": bool(self.sub_chk.isChecked()) if is_video else False,
             "destination_dir": self.dir_input.text().strip() or get_default_download_dir(),
             "category": self.cat_combo.currentText(),
             "auto_start": auto_start,

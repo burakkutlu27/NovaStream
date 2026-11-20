@@ -3,10 +3,14 @@ NovaStream Turbo Segmented Download Engine
 IDM benzeri çok kanallı (multi-connection 8-32 thread) dinamik parçalı indirme motoru.
 """
 
+import ctypes
+import email.utils
+import hashlib
 import json
 import logging
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -73,11 +77,147 @@ class DownloadError(Exception):
     pass
 
 
+class _RateLimitError(DownloadError):
+    def __init__(self, code, wait_s):
+        super().__init__(f"HTTP {code}")
+        self.wait_s = wait_s
+
+
+def _parse_retry_after(val, default_s=5.0):
+    if not val:
+        return default_s
+    s = str(val).strip()
+    if s.isdigit():
+        return max(1.0, min(60.0, float(s)))
+    try:
+        dt = email.utils.parsedate_to_datetime(s)
+        delta = dt.timestamp() - time.time()
+        return max(1.0, min(60.0, delta))
+    except Exception:
+        return default_s
+
+
+def _hide_dir_windows(path):
+    if sys.platform != "win32":
+        return
+    try:
+        ctypes.windll.kernel32.SetFileAttributesW(str(path), 0x02)
+    except Exception:
+        pass
+
+
+def _nearest_existing_parent(path):
+    cur = os.path.abspath(path)
+    while cur and not os.path.exists(cur):
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    return cur
+
+
+def _same_drive_or_device(path_a, path_b):
+    if sys.platform == "win32":
+        da = os.path.splitdrive(os.path.abspath(path_a))[0].lower()
+        db = os.path.splitdrive(os.path.abspath(path_b))[0].lower()
+        return bool(da and db and da == db)
+    try:
+        pa = _nearest_existing_parent(path_a)
+        pb = _nearest_existing_parent(path_b)
+        return os.stat(pa).st_dev == os.stat(pb).st_dev
+    except OSError:
+        return False
+
+
+def get_temp_root(destination_dir=None, create=True):
+    """
+    İndirilenler klasörünü ara dosyalardan (.part, .ytdl, .nspart) temiz tutmak için
+    aynı sürücüdeki uygulama geçici kökünü döndürür; farklı bir sürücüye kaydediliyorsa
+    hedef klasörde gizli '.novastream_temp' alt klasörü kullanır.
+    """
+    dest = os.path.abspath(destination_dir or get_default_download_dir())
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+        preferred = os.path.join(base, "NovaStream", "temp")
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+        preferred = os.path.join(base, "novastream", "temp")
+
+    if _same_drive_or_device(dest, preferred):
+        if create:
+            os.makedirs(preferred, exist_ok=True)
+        return preferred
+
+    fallback = os.path.join(dest, ".novastream_temp")
+    if create:
+        os.makedirs(fallback, exist_ok=True)
+        _hide_dir_windows(fallback)
+    return fallback
+
+
+def temp_key_for(*parts):
+    joined = "|".join(str(p or "") for p in parts)
+    return hashlib.sha256(joined.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def atomic_move(src, dst):
+    try:
+        os.replace(src, dst)
+    except OSError:
+        shutil.move(src, dst)
+
+
+def cleanup_old_temp_entries(temp_root, max_age_hours=72):
+    if not temp_root or not os.path.isdir(temp_root):
+        return
+    cutoff = time.time() - max_age_hours * 3600
+    try:
+        for name in os.listdir(temp_root):
+            path = os.path.join(temp_root, name)
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path, ignore_errors=True)
+                    else:
+                        os.remove(path)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 def _numbered_name(path, n):
     if n == 0:
         return path
     base, ext = os.path.splitext(path)
     return f"{base} ({n}){ext}"
+
+
+def _active_temp_targets(directory):
+    targets = {}
+    temp_root = get_temp_root(directory, create=False)
+    if not os.path.isdir(temp_root):
+        return targets
+    try:
+        names = os.listdir(temp_root)
+    except OSError:
+        return targets
+    for name in names:
+        if not (name.startswith("seg_") and name.endswith(META_SUFFIX)):
+            continue
+        meta_file = os.path.join(temp_root, name)
+        part_file = meta_file[: -len(META_SUFFIX)] + PART_SUFFIX
+        if not os.path.exists(part_file):
+            continue
+        try:
+            with open(meta_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            tp = data.get("target_path")
+            if tp:
+                targets[os.path.normcase(os.path.abspath(tp))] = data.get("source_url")
+        except Exception:
+            pass
+    return targets
 
 
 def choose_target_path(directory, filename, url=None):
@@ -87,6 +227,7 @@ def choose_target_path(directory, filename, url=None):
     - Aksi halde mevcut hiçbir dosyanın üzerine yazmayan benzersiz bir ad üretir: "ad (1).ext".
     """
     first = os.path.join(directory, filename)
+    active_targets = _active_temp_targets(directory)
     for n in range(0, 1000):
         cand = _numbered_name(first, n)
         meta = cand + META_SUFFIX
@@ -97,6 +238,11 @@ def choose_target_path(directory, filename, url=None):
                         return cand
             except Exception:
                 pass
+        cand_key = os.path.normcase(os.path.abspath(cand))
+        if cand_key in active_targets:
+            if url and active_targets[cand_key] == url and not os.path.exists(cand):
+                return cand
+            continue
         if not os.path.exists(cand) and not os.path.exists(cand + PART_SUFFIX):
             return cand
     raise DownloadError("Uygun dosya adı bulunamadı")
@@ -160,6 +306,8 @@ class SegmentedDownloader:
 
         self.current_speed = 0.0
         self.eta_seconds = None
+        self._rate_limit_until = 0.0
+        self._effective_connections = self.num_connections
 
     # ------------------------------------------------------------------ yardımcılar
     def _req_headers(self):
@@ -189,8 +337,17 @@ class SegmentedDownloader:
 
         probe_headers = dict(headers)
         probe_headers["Range"] = "bytes=0-0"
-        probe = requests.get(self.url, headers=probe_headers, cookies=self.cookies, stream=True,
-                             allow_redirects=True, timeout=15)
+        probe = None
+        for attempt in range(4):
+            probe = requests.get(self.url, headers=probe_headers, cookies=self.cookies, stream=True,
+                                 allow_redirects=True, timeout=15)
+            if probe.status_code in (429, 503) and attempt < 3:
+                wait_s = min(5.0, _parse_retry_after(probe.headers.get("Retry-After"), 1.5 * (attempt + 1)))
+                probe.close()
+                self._effective_connections = max(1, self._effective_connections // 2)
+                time.sleep(wait_s)
+                continue
+            break
         try:
             if probe.status_code >= 400:
                 raise DownloadError(f"Sunucu hata döndürdü: HTTP {probe.status_code}")
@@ -226,8 +383,10 @@ class SegmentedDownloader:
         os.makedirs(self.destination_dir, exist_ok=True)
         self.target_path = choose_target_path(self.destination_dir, self.filename, self.source_url)
         self.filename = os.path.basename(self.target_path)
-        self.part_path = self.target_path + PART_SUFFIX
-        self.meta_path = self.target_path + META_SUFFIX
+        temp_root = get_temp_root(self.destination_dir, create=True)
+        stem = f"seg_{temp_key_for(os.path.abspath(self.destination_dir), self.source_url, self.filename)}"
+        self.part_path = os.path.join(temp_root, stem + PART_SUFFIX)
+        self.meta_path = os.path.join(temp_root, stem + META_SUFFIX)
         return True
 
     # ------------------------------------------------------------------ parçalar
@@ -288,6 +447,7 @@ class SegmentedDownloader:
                     "url": self.url,
                     "total_size": self.total_size,
                     "filename": self.filename,
+                    "target_path": os.path.abspath(self.target_path) if self.target_path else "",
                     "segments": [{k: s[k] for k in ("id", "start", "end", "downloaded", "done")} for s in self.segments],
                     "updated_at": time.time()
                 }
@@ -369,7 +529,18 @@ class SegmentedDownloader:
             offset = seg["start"]
 
         try:
+            wait = self._rate_limit_until - time.time()
+            if wait > 0:
+                time.sleep(min(wait, 10.0))
+            if self.is_cancelled or self._failed:
+                return
             with requests.get(self.url, headers=headers, cookies=self.cookies, stream=True, timeout=20) as res:
+                if res.status_code in (429, 503):
+                    wait_s = _parse_retry_after(
+                        res.headers.get("Retry-After"),
+                        min(2 ** (seg["errors"] + 1), 30)
+                    )
+                    raise _RateLimitError(res.status_code, wait_s)
                 if res.status_code >= 400:
                     raise DownloadError(f"HTTP {res.status_code}")
                 if ranged and res.status_code != 206:
@@ -404,15 +575,30 @@ class SegmentedDownloader:
                 else:
                     raise DownloadError("Bağlantı erken kapandı")
                 seg["errors"] = 0
-        except (DownloadError, requests.RequestException, OSError) as e:
-            with self.segments_lock:
-                seg["errors"] += 1
-                seg["retry_at"] = time.time() + min(2 ** seg["errors"], 30)
-                errors = seg["errors"]
-            logging.warning(f"Parça #{seg['id']} hatası ({errors}/{self.max_retries}): {e}")
-            fatal = isinstance(e, DownloadError) and str(e).startswith("HTTP 4")
-            if errors > self.max_retries or (fatal and errors >= 2):
-                self._fail(f"Parça #{seg['id']} indirilemedi: {e}")
+        except (_RateLimitError, DownloadError, requests.RequestException, OSError) as e:
+            if isinstance(e, _RateLimitError):
+                with self.segments_lock:
+                    seg["errors"] += 1
+                    self._rate_limit_until = max(self._rate_limit_until, time.time() + e.wait_s)
+                    self._effective_connections = max(1, self._effective_connections // 2)
+                    seg["retry_at"] = self._rate_limit_until
+                    errors = seg["errors"]
+                limit = max(self.max_retries, 8)
+                logging.warning(
+                    f"Parça #{seg['id']} hız sınırı ({e}): {e.wait_s:.1f}s bekleniyor, "
+                    f"bağlantı={self._effective_connections} ({errors}/{limit})"
+                )
+                if errors > limit:
+                    self._fail(f"Parça #{seg['id']} indirilemedi: {e}")
+            else:
+                with self.segments_lock:
+                    seg["errors"] += 1
+                    seg["retry_at"] = time.time() + min(2 ** seg["errors"], 30)
+                    errors = seg["errors"]
+                logging.warning(f"Parça #{seg['id']} hatası ({errors}/{self.max_retries}): {e}")
+                fatal = isinstance(e, DownloadError) and str(e).startswith("HTTP 4") and not str(e).startswith("HTTP 429")
+                if errors > self.max_retries or (fatal and errors >= 2):
+                    self._fail(f"Parça #{seg['id']} indirilemedi: {e}")
 
     def _worker_wrapper(self, seg):
         try:
@@ -425,7 +611,7 @@ class SegmentedDownloader:
         if not self.supports_range:
             return
         running = sum(1 for s in self.segments if s["running"])
-        idle = self.num_connections - running - sum(1 for s in self.segments if not s["running"] and not self._seg_complete(s))
+        idle = self._effective_connections - running - sum(1 for s in self.segments if not s["running"] and not self._seg_complete(s))
         while idle > 0 and len(self.segments) < 64:
             biggest, best = None, 0
             for s in self.segments:
@@ -451,11 +637,17 @@ class SegmentedDownloader:
                 with self.segments_lock:
                     if all(self._seg_complete(s) for s in self.segments):
                         break
-                    self._split_for_idle_workers()
-                    to_start = [s for s in self.segments
-                                if not s["running"] and not self._seg_complete(s) and s["retry_at"] <= now]
-                    for s in to_start:
-                        s["running"] = True
+                    if now < self._rate_limit_until:
+                        to_start = []
+                    else:
+                        self._split_for_idle_workers()
+                        running = sum(1 for s in self.segments if s["running"])
+                        slots = max(0, self._effective_connections - running)
+                        candidates = [s for s in self.segments
+                                      if not s["running"] and not self._seg_complete(s) and s["retry_at"] <= now]
+                        to_start = candidates[:slots]
+                        for s in to_start:
+                            s["running"] = True
                 for s in to_start:
                     executor.submit(self._worker_wrapper, s)
                 time.sleep(0.3)
@@ -467,7 +659,7 @@ class SegmentedDownloader:
             final = self.target_path
             if os.path.exists(final):
                 final = choose_target_path(self.destination_dir, os.path.basename(self.target_path))
-            os.replace(self.part_path, final)
+            atomic_move(self.part_path, final)
             self.target_path = final
             self.filename = os.path.basename(final)
             if os.path.exists(self.meta_path):
@@ -487,6 +679,8 @@ class SegmentedDownloader:
         save_counter = 0
         while self.is_running and not self.is_cancelled and not self._failed:
             time.sleep(0.4)
+            if not self.is_running or self.is_cancelled or self._failed:
+                break
             now = time.time()
             with self.segments_lock:
                 current = sum(s["downloaded"] for s in self.segments)

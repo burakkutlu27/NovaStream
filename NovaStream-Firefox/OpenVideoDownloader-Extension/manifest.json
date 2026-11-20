@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NovaStream Video Downloader",
-  "version": "2.4.3",
+  "version": "2.5.0",
   "description": "Herhangi bir sekme açmadan arka planda HLS ve MP4 videoları doğrudan İndirilenler klasörüne kaydeden limitsiz medya indirici.",
   "browser_specific_settings": {
     "gecko": {

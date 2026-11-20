@@ -1,26 +1,22 @@
 # NovaStream İndirme Yöneticisi
 
 [![CI](https://github.com/burakkutlu27/NovaStream/actions/workflows/ci.yml/badge.svg)](https://github.com/burakkutlu27/NovaStream/actions/workflows/ci.yml)
-![Sürüm](https://img.shields.io/badge/sürüm-v2.4.3-2563eb)
+![Sürüm](https://img.shields.io/badge/sürüm-v2.5.0-2563eb)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0f172a)
 ![Lisans](https://img.shields.io/badge/lisans-MIT-10b981)
 
-**NovaStream**, Windows ve Linux için geliştirilmiş; çok kanallı parçalı HTTP indirme motorunu, YouTube / HLS / DASH video akışı desteğini ve Chrome / Edge / Brave / Firefox tarayıcı eklentilerini tek çatı altında birleştiren açık kaynaklı bir indirme yöneticisidir.
+**NovaStream**, Windows ve Linux için geliştirilmiş; çok kanallı parçalı HTTP indirme motorunu, YouTube / HLS / DASH ve gömülü iframe oynatıcı video akışı desteğini, altyazı (.srt) indirmeyi ve Chrome / Edge / Brave / Opera / Vivaldi / Firefox tarayıcı eklentilerini tek çatı altında birleştiren açık kaynaklı bir indirme yöneticisidir.
 
 ---
 
-## Özellikler (v2.4.3)
+## Özellikler (v2.5.0)
 
-- **Çok Kanallı Parçalı İndirme Motoru (`1–32` Bağlantı):** HTTP `Range` istekleriyle dosyaları paralel parçalara böler, boşta kalan bağlantılara kalan işten parça aktarır ve `.nspart` / `.nspart.meta` dosyalarıyla duraklatma veya uygulama kapanışı sonrası kaldığı yerden devam eder.
-- **Güvenli Dosya Yönetimi:** İndirilen veri önce `.nspart` geçici dosyasına yazılır, tamamlanınca hedef ada taşınır; mevcut dosyaların üzerine yazılmaz (`dosya (1).ext`). Listeden kaldırma işlemi diskteki dosyaya dokunmaz.
-- **Video ve Akış İndirme (yt-dlp + FFmpeg + Deno):** YouTube (4K/1080p/720p/480p/yalnızca MP3 ses), HLS (`.m3u8`), şifreli HLS, ayrı ses kanallı akışlar ve DASH (`.mpd`) videolarını indirip birleştirir. Haftalık otomatik yt-dlp/Deno güncellemesi destekler.
-- **Tarayıcı Eklentileri (Manifest V3):**
-  - Chrome, Microsoft Edge, Brave ve Firefox ile uyumludur.
-  - Sayfadaki medya akışlarını ve HLS master playlist çözünürlüklerini otomatik yakalar.
-  - Video oynatıcı üzerinde yüzen indirme düğmesi, açılır pencere (popup) ve sağ tık *"NovaStream ile indir"* menüsü sunar.
-  - Giriş gerektiren (ör. kanal üyeliği) videolarda oturum çerezlerini yalnızca yerel makinedeki NovaStream'e geçici olarak iletir.
-- **Güvenli Yerel Köprü (`127.0.0.1:9191`) & Native Messaging:** Köprü sunucusu yalnızca tarayıcı eklenti kökenlerinden (`chrome-extension://`, `moz-extension://`, `extension://`, `safari-web-extension://`) gelen istekleri kabul eder; web sayfalarının doğrudan erişimini `403` ile engeller.
-- **Modern Koyu Masaüstü Arayüzü (PyQt6):** Kategori filtreleme, canlı hız ve bağlantı kanalı görselleştirici (`ChunkVisualizer`), sistem tepsisi küçültme/bildirim, pano izleme ve tek örnek (single-instance) kilidi.
+- **Çok Kanallı Parçalı İndirme Motoru (`1–32` Bağlantı) & HTTP 429 Koruması:** HTTP `Range` istekleriyle dosyaları paralel parçalara böler, boşta kalan bağlantılara kalan işten parça aktarır; HTTP `429`/`503` hız sınırlarında `Retry-After` başlığına uyup bağlantı sayısını otomatik azaltarak kesintisiz devam eder.
+- **Gömülü Iframe Oynatıcı Uyumluluğu:** `webRequest.onBeforeSendHeaders` ile gerçek iframe `Referer`/`Origin` başlıklarını yakalar ve DNR üzerinden uygular. Master playlist içindeki ayrı ses ve altyazı alt listelerini sahte `[HD]` video olarak göstermeyi engeller; her akış için oynatıcı kaynak etiketini, çözünürlüğü, süreyi ve bit hızını net sunar.
+- **Altyazı Yakalama ve İndirme (`.srt`):** Web sayfasındaki `<track>` öğelerini, ağdaki `.vtt`/`.srt`/`.ass` dosyalarını ve HLS altyazı listelerini algılar; WebVTT akışlarını otomatik `.srt` biçimine dönüştürüp indirir. Masaüstü uygulamasında da `yt-dlp` ile video + altyazı indirme desteği sunar.
+- **Masaüstü Listesinde Çoklu Seçim ve Tümünü Seçme:** Tablo içi onay kutuları (`☐`/`☑`), araç çubuğu **Tümünü Seç** düğmesi, `Ctrl+A`, `Ctrl+Tık`, `Shift+Tık`, `Delete` ve `Escape` kısayollarıyla toplu duraklatma, devam ettirme, URL kopyalama ve silme işlemleri.
+- **Paketli Eklenti Dağıtımı & Tarayıcı Algılama:** `.zip`, imzalı `.crx` (CRX3) ve `.xpi` eklenti paketleri üretilir. Kurulum sihirbazı ve Ayarlar penceresi kurulu tarayıcıları (Chrome, Edge, Brave, Opera, Vivaldi, Chromium, Firefox, Firefox Dev, LibreWolf, Waterfox) algılayıp köprü kaydını yapar ve adım adım tek tıkla klasör/dosya rehberliği sunar.
+- **Güvenli Dosya Yönetimi & Yerel Köprü (`127.0.0.1:9191`):** İndirilen veri `.nspart` dosyasına yazılır, bitince asıl ada taşınır; mevcut dosyaların üzerine yazılmaz. Köprü sunucusu yalnızca tarayıcı eklenti kökenlerinden istek kabul eder.
 
 ---
 
@@ -28,12 +24,12 @@
 
 | Dizin / Dosya | Açıklama |
 | --- | --- |
-| `NovaStream-App/` | PyQt6 masaüstü uygulaması, indirme motorları (`core/`), arayüz (`ui/`), kurulum sihirbazı (`installer.py`), Inno Setup betiği (`NovaStream_Setup.iss`) ve testler (`tests/`) |
-| `NovaStream-v2/` | Chrome / Edge / Brave Manifest V3 eklenti kaynağı ve Native Messaging host (`native_host.py`, `native_host.bat`, `native_host.sh`) |
-| `NovaStream-Firefox/` | `tools/sync_extensions.py` ile `NovaStream-v2` kaynağından otomatik senkronize edilen Firefox eklenti paketi |
-| `tools/` | Windows gömülü Python paketi oluşturucu (`build_windows_bundle.ps1`) ve eklenti senkronizasyon aracı (`sync_extensions.py`) |
-| `.github/workflows/` | Windows ve Ubuntu üzerinde çalışan CI doğrulama hattı (`ci.yml`) |
-| `KULLANIM-KILAVUZU.txt` | Son kullanıcı kurulum ve kullanım kılavuzu |
+| `NovaStream-App/` | PyQt6 masaüstü uygulaması, indirme motorları (`core/`), tarayıcı algılama (`core/browser_setup.py`), arayüz (`ui/`), kurulum sihirbazı (`installer.py`), Inno Setup betiği (`NovaStream_Setup.iss`) ve testler (`tests/`) |
+| `NovaStream-v2/` | Chrome / Edge / Brave / Opera / Vivaldi Manifest V3 eklenti kaynağı ve Native Messaging host (`native_host.py`, `native_host.bat`, `native_host.sh`) |
+| `NovaStream-Firefox/` | `tools/sync_extensions.py` ile `NovaStream-v2` kaynağından otomatik senkronize edilen Firefox / LibreWolf / Waterfox eklenti paketi |
+| `tools/` | Gömülü Python/FFmpeg paketleyici (`build_windows_bundle.ps1`), eklenti senkronizasyonu (`sync_extensions.py`), `.zip`/`.crx`/`.xpi` paketleyici (`package_extensions.py`) ve eklenti birim testleri (`test_extension.mjs`) |
+| `.github/workflows/` | CI doğrulama hattı (`ci.yml`) ve etiket tabanlı otomatik GitHub Release yayınlama hattı (`release.yml`) |
+| `BENI-OKU.txt` & `KULLANIM-KILAVUZU.txt` | Detaylı tarayıcı kurulumu (hangi klasör/dosya seçilmeli) ve kullanım kılavuzu |
 
 ---
 
@@ -41,13 +37,12 @@
 
 ### 1. Windows
 
-1. [GitHub Releases](https://github.com/burakkutlu27/NovaStream/releases) sayfasından **`NovaStream-Kurulum-2.4.3.exe`** dosyasını indirip çalıştırın.
+1. [GitHub Releases](https://github.com/burakkutlu27/NovaStream/releases) sayfasından **`NovaStream-Kurulum-v2.5.0.exe`** dosyasını indirip çalıştırın.
    - Windows *"Bilinmeyen yayımcı"* uyarısı gösterirse **Ek bilgi → Yine de çalıştır** seçeneğini kullanın.
-   - Paket içinde gömülü Python yer aldığı için sistemde Python kurulu olması gerekmez ve yönetici izni istemez.
-   - Kurulum varsayılan olarak `%LOCALAPPDATA%\NovaStream` klasörüne yapılır, kısayolları ve tarayıcı köprülerini kaydeder, FFmpeg yoksa `winget` ile kurmayı dener.
-2. Kaynak koddan kurmak isterseniz önce gömülü Python çalışma ortamını hazırlayıp ardından `Kurulum-Windows.bat` dosyasını çalıştırın:
+   - Gömülü Python ve FFmpeg paketlendiği için bilgisayarınızda ek kurulum gerektirmez.
+2. Kaynak koddan kurmak isterseniz:
    ```powershell
-   powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1
+   powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1 -IncludeFFmpeg
    .\Kurulum-Windows.bat
    ```
 
@@ -60,69 +55,62 @@ chmod +x NovaStream-App/run_installer.sh
 ./NovaStream-App/run_installer.sh
 ```
 
-Uygulama `~/.local/share/NovaStream` dizinine kurulur, Python sanal ortamı (`venv`) oluşturulur ve sistemde yoksa paket yöneticisi aracılığıyla FFmpeg kurulumu başlatılır.
+### 3. Tarayıcı Eklentisini Yükleme (Detaylı Rehber: `BENI-OKU.txt`)
 
-### 3. Tarayıcı Eklentisini Yükleme (Bir Kez)
+Kurulum sihirbazı Native Messaging köprülerini ve Gecko `.xpi` profillerini otomatik hazırlar. Tarayıcı güvenlik politikası nedeniyle manuel yükleme gerekirse:
 
-#### Chrome / Microsoft Edge / Brave
-1. Tarayıcıda **`chrome://extensions`** (Edge için `edge://extensions`, Brave için `brave://extensions`) adresini açın.
+#### Chrome / Microsoft Edge / Brave / Opera / Vivaldi
+1. `chrome://extensions` (veya `edge://extensions`, `brave://extensions`, `opera://extensions`, `vivaldi://extensions`) adresini açın.
 2. Sağ üstten **Geliştirici modu (Developer mode)** anahtarını açın.
-3. **Paketlenmemiş öğe yükle (Load unpacked)** düğmesine tıklayın ve kurulum sonrası oluşan şu klasörü seçin:
+3. **Paketlenmemiş öğe yükle (Load unpacked)** düğmesine tıklayın ve **`manifest.json` dosyasını değil**, doğrudan şu **KLASÖRÜ** seçin:
    - **Windows:** `%LOCALAPPDATA%\NovaStream\browser\chrome`
    - **Linux:** `~/.local/share/NovaStream/browser/chrome`
-   - *(Kaynak klasörden doğrudan test için: `NovaStream-v2/OpenVideoDownloader-Extension`)*
+   - *(Kaynak klasörden test için: `NovaStream-v2/OpenVideoDownloader-Extension`)*
 4. Sabit eklenti kimliği: `phbdcgdmpmgacehbfkkjbmjofdhhhohg`
 
-#### Firefox
-1. Adres çubuğuna **`about:debugging#/runtime/this-firefox`** yazıp açın.
-2. **Geçici Eklenti Yükle (Load Temporary Add-on...)** düğmesine tıklayın ve şu dosyayı seçin:
-   - **Windows:** `%LOCALAPPDATA%\NovaStream\browser\firefox\manifest.json`
-   - **Linux:** `~/.local/share/NovaStream/browser/firefox/manifest.json`
-   - *(Kaynak klasörden doğrudan test için: `NovaStream-Firefox/OpenVideoDownloader-Extension/manifest.json`)*
+> **Not (`.crx` ve `.zip` paketleri):** Tarayıcı politikaları gereği Windows'ta Chrome/Edge, mağaza dışı yerel `.crx` dosyalarının sessiz kurulumuna izin vermez. Taşınabilir `.zip` ve `.crx` paketleri hem `<kurulum>\browser\packages\` içinde hem de GitHub Releases altında sunulur.
+
+#### Firefox (Standart) & LibreWolf / Waterfox / Firefox Dev
+- **Standart Firefox:** `about:debugging#/runtime/this-firefox` adresini açın → **Geçici Eklenti Yükle...** → **klasörü değil şu DOSYAYI seçin:**
+  - **Windows:** `%LOCALAPPDATA%\NovaStream\browser\firefox\manifest.json`
+  - **Linux:** `~/.local/share/NovaStream/browser/firefox/manifest.json`
+- **Firefox Developer Edition / LibreWolf / Waterfox:** Kurulum sihirbazı `novastream@downloader.local.xpi` paketini profilinizin `extensions` klasörüne otomatik yerleştirir.
 
 ---
 
 ## Kullanım ve Sorun Giderme
 
-- **Otomatik Video Yakalama:** Video sayfasında oynatıcının sağ üst köşesinde beliren **İndir** düğmesine tıklayın veya tarayıcı araç çubuğundaki NovaStream simgesini açın. Masaüstü uygulaması açıksa indirme otomatik olarak uygulamaya aktarılır.
-- **Sağ Tık Menüsü:** Herhangi bir video, ses veya dosya bağlantısına sağ tıklayıp **NovaStream ile indir** seçeneğini kullanabilirsiniz.
+- **Yüzen İndirme Butonu ve Popup:** Oynatıcı üzerindeki **İndir** düğmesi her iframe kaynağını ayrı algılar; menüde çözünürlük, kaynak adı, süre ve algılanan `.srt` altyazıları listelenir.
+- **Çoklu Seçim Kısayolları:** `Ctrl+A` (Tümünü seç / kaldır), `Delete` (Seçilileri sil), `Esc` (Seçimi temizle), `Ctrl+Tık` / `Shift+Tık` veya tablo onay kutuları.
 - **Log Dosyaları:**
-  - Masaüstü uygulaması logları (Ayarlar → *Log klasörünü aç*): Windows'ta `%APPDATA%\NovaStream\logs`, Linux'ta `~/.config/novastream/logs`
-  - Native Messaging köprü logu: Windows'ta `%TEMP%\novastream_native.log`, Linux'ta `/tmp/novastream_native.log`
-- **Yarım İndirmeler:** Duraklatılan veya kesilen indirmeler `.nspart` uzantısıyla saklanır ve **Devam Et** ile kaldığı bayttan sürer.
+  - Masaüstü uygulaması: Windows'ta `%APPDATA%\NovaStream\logs`, Linux'ta `~/.config/novastream/logs`
+  - Native Messaging: Windows'ta `%TEMP%\novastream_native.log`, Linux'ta `/tmp/novastream_native.log`
 
 ---
 
 ## Gelecek Planı (Roadmap)
 
-Sonraki sürümlerde üzerinde çalışılacak planlanan geliştirmeler:
-
-- [ ] **Rapidrame / Close Oynatıcı Uyumluluğu:** Gömülü iframe oynatıcılarında doğru `Referer`/`Origin` aktarımı, HTTP `429` hız uyarlaması ve medya listesinde gereksiz/tekrarlı seçeneklerin temizlenmesi.
-- [ ] **Çoklu Seçim ve Tümünü Seçme:** Masaüstü indirme tablosunda çoklu satır seçimi, `Ctrl+A` / tümünü seçme ve toplu işlem (duraklat/devam/sil) desteği.
-- [ ] **Altyazı Yakalama ve İndirme:** Web sayfası ve akışlardaki `.vtt`, `.srt`, `.ass` ve HLS altyazı kanallarını algılayıp indirme desteği.
-- [ ] **Paketli Eklenti Dağıtımı ve Otomatik Tarayıcı Tespiti:** `.xpi`, `.crx` ve `.zip` paketleme, kurulum sihirbazında yüklü tarayıcı profillerini otomatik algılama ve adım adım rehberli kurulum.
-- [ ] **Harici Bağımlılıkları Azaltma:** FFmpeg ve yt-dlp bağımlılığını en aza indiren yerleşik alternatif akış/birleştirme motoru üzerine araştırma ve geliştirme.
-- [ ] **Otomatik GitHub Releases Hattı:** Etiket (`tag`) bazlı otomatik Windows kurulum paketi ve eklenti arşivi yayınlama iş akışı.
+- [ ] Harici FFmpeg ve yt-dlp bağımlılıklarından tamamen bağımsız, yerleşik medya ayrıştırıcı ve muxer motoru araştırma ve geliştirme.
+- [ ] Chrome Web Store ve Mozilla Add-ons (AMO) üzerinden resmi mağaza imzalı eklenti dağıtımı.
 
 ---
 
 ## Geliştirici Komutları
 
-- **Eklentileri senkronize etme (`NovaStream-v2` → `NovaStream-Firefox`):**
+- **Eklentileri senkronize etme ve paketleme (`.zip`, `.crx`, `.xpi`):**
   ```bash
   python tools/sync_extensions.py
+  python tools/package_extensions.py --out dist/extensions --with-id-name
   ```
-- **Windows gömülü Python çalışma ortamını hazırlama:**
+- **Windows gömülü Python + FFmpeg paketi hazırlama:**
   ```powershell
-  powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1
+  powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1 -IncludeFFmpeg
   ```
-- **Testleri çalıştırma (ağ erişimi gerekmez; yerel test HTTP sunucusu kullanır):**
+- **Testleri çalıştırma:**
   ```bash
   python -m pytest -v NovaStream-App/tests
+  node tools/test_extension.mjs
   ```
-- **Kurulum yapmadan yerel Native Host kaydı:**
-  - Windows: `setup_native_host_windows.bat`
-  - Linux: `./setup_native_host.sh`
 
 ---
 

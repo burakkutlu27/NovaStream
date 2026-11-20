@@ -1,0 +1,118 @@
+================================================================================
+                  NovaStream İndirme Yöneticisi v2.5.0 - BENİ OKU
+================================================================================
+
+Bu rehber, tarayıcı eklentisinin kurulumu, otomatik algılama adımları ve
+tarayıcı güvenlik kısıtlaması olduğunda eklentinin manuel olarak nasıl
+yükleneceğini adım adım açıklar.
+
+--------------------------------------------------------------------------------
+1. KURULUM SİHİRBAZI OTOMATİK OLARAK NELERİ YAPAR?
+--------------------------------------------------------------------------------
+Kurulum sırasında NovaStream:
+1) Uygulamayı kurulum dizinine kopyalar:
+   - Windows: %LOCALAPPDATA%\NovaStream
+   - Linux:   ~/.local/share/NovaStream
+2) Bilgisayarınızda kurulu tarayıcıları otomatik olarak tarar:
+   Chrome, Microsoft Edge, Brave, Opera / Opera GX, Vivaldi, Chromium,
+   Mozilla Firefox, Firefox Developer Edition, LibreWolf ve Waterfox.
+3) Algılanan tüm tarayıcılar için Native Messaging köprü kayıtlarını otomatik
+   oluşturur (Windows Kayıt Defteri HKCU + Linux NativeMessagingHosts).
+4) Eklenti paketlerini hazırlar (<kurulum>\browser\packages\):
+   - Chrome / Edge / Brave / Opera / Vivaldi için .zip (ve varsa imzalı .crx)
+   - Firefox / LibreWolf / Waterfox için .xpi (novastream@downloader.local.xpi)
+5) Gecko profillerini bulup .xpi paketini profilin extensions\ klasörüne koyar.
+   (Firefox Developer Edition, LibreWolf ve Waterfox'ta otomatik yüklenir.)
+
+--------------------------------------------------------------------------------
+2. TARAYICI OTOMATİK YÜKLEMEYE İZİN VERMEZSE MANUEL KURULUM (ADIM ADIM)
+--------------------------------------------------------------------------------
+Modern tarayıcıların güvenlik politikası gereği:
+- Windows'ta Chrome, Edge, Brave, Opera ve Vivaldi, mağaza dışı yerel .crx/.zip
+  dosyalarının sessiz/kalıcı otomatik kurulumunu engeller.
+- Standart Mozilla Firefox, Mozilla tarafından imzalanmamış yerel .xpi
+  dosyalarının kalıcı kurulumunu engeller.
+
+Bu durumda eklentiyi tarayıcıya YALNIZCA BİR KEZ aşağıdaki şekilde tanıtın:
+
+=== A) Google Chrome / Microsoft Edge / Brave / Opera / Vivaldi ===
+1. Tarayıcınızı açın ve adres çubuğuna aşağıdakilerden birini yazıp Enter'a basın:
+   - Google Chrome : chrome://extensions
+   - Microsoft Edge: edge://extensions
+   - Brave         : brave://extensions
+   - Opera         : opera://extensions
+   - Vivaldi       : vivaldi://extensions
+2. Sayfanın sağ üst köşesindeki "Geliştirici modu" (Developer mode) anahtarını
+   AÇIK konuma getirin.
+3. Sol üstte açılan "Paketlenmemiş öğe yükle" (Load unpacked) düğmesine tıklayın.
+4. Açılan klasör seçme penceresinde ŞU KLASÖRÜ SEÇİN:
+   - Windows: %LOCALAPPDATA%\NovaStream\browser\chrome
+     (Örnek tam yol: C:\Users\<KullanıcıAdı>\AppData\Local\NovaStream\browser\chrome)
+   - Linux  : ~/.local/share/NovaStream/browser/chrome
+   - Kaynak koddan test ediyorsanız: NovaStream-v2\OpenVideoDownloader-Extension
+
+   [DİKKAT - NE SEÇİLMEMELİ?]
+   * "manifest.json" dosyasını DEĞİL, içinde manifest.json bulunan "chrome"
+     KLASÖRÜNÜ seçin ("Klasör Seç" düğmesine basın).
+   * "browser" veya "browser\packages" klasörünü seçerseniz hata alırsınız.
+   * İpucu: Kurulum Sihirbazı bitiş ekranındaki veya NovaStream → Ayarlar →
+     "Tarayıcı Eklentisini Kur / Yenile" penceresindeki
+     "Chrome/Edge/Brave Klasörünü Göster" düğmesi sizi doğrudan doğru klasöre götürür.
+
+   * Eklenti kimliği her bilgisayarda sabittir: phbdcgdmpmgacehbfkkjbmjofdhhhohg
+   * Güncelleme yaptığınızda aynı sayfadan eklenti kartındaki Yenile (↻)
+     simgesine basmanız yeterlidir.
+
+=== B) Mozilla Firefox (Standart Sürüm) ===
+1. Firefox adres çubuğuna şu adresi yazıp Enter'a basın:
+   about:debugging#/runtime/this-firefox
+2. "Geçici Eklenti Yükle..." (Load Temporary Add-on...) düğmesine tıklayın.
+3. Açılan dosya seçme penceresinde ŞU DOSYAYI SEÇİN:
+   - Windows: %LOCALAPPDATA%\NovaStream\browser\firefox\manifest.json
+   - Linux  : ~/.local/share/NovaStream/browser/firefox/manifest.json
+   - Kaynak koddan test ediyorsanız: NovaStream-Firefox\OpenVideoDownloader-Extension\manifest.json
+
+   [DİKKAT - NE SEÇİLMEMELİ?]
+   * Firefox "Geçici Eklenti Yükle" penceresi KLASÖR değil DOSYA ister.
+   * Mutlaka firefox klasörünün içindeki "manifest.json" dosyasını seçin
+     (veya packages klasöründeki "novastream@downloader.local.xpi" dosyasını seçin).
+
+=== C) Firefox Developer Edition / LibreWolf / Waterfox ===
+- Kurulum sihirbazı profil klasörlerinizi bulup
+  novastream@downloader.local.xpi dosyasını otomatik yerleştirir.
+- İlk açılışta tarayıcı onay isterse "Etkinleştir" deyin.
+- Gerekirse about:addons sayfasında "Dosyadan Eklenti Yükle..." ile
+  %LOCALAPPDATA%\NovaStream\browser\packages\novastream@downloader.local.xpi
+  dosyasını seçebilirsiniz.
+
+--------------------------------------------------------------------------------
+3. HIZLI KULLANIM VE YENİ ÖZELLİKLER (v2.5.0)
+--------------------------------------------------------------------------------
+- Gömülü Iframe Oynatıcılar:
+  * Her iframe oynatıcısının kendi Referer/Origin bilgisi korunur.
+  * Master playlist içindeki ayrı ses ve altyazı listeleri sahte [HD] video
+    olarak listelenmez; her akışın yanında oynatıcı kaynak adı,
+    çözünürlük, süre ve bit hızı net olarak gösterilir.
+  * HTTP 429 hız sınırı yanıtlarında otomatik bekleme ve bağlantı azaltma uygulanır.
+- Altyazı İndirme:
+  * Sayfadaki .vtt / .srt / .ass altyazıları ve HLS altyazı kanalları otomatik
+    algılanır. Video üzerindeki menüden veya eklenti penceresinden tek tıkla
+    .srt formatına çevrilerek indirilir.
+  * Masaüstü uygulamasında Ayarlar veya İndirme Ekle penceresinden video ile
+    birlikte otomatik altyazı indirme (TR/EN) açılabilir.
+- Listede Çoklu Seçim (Masaüstü Uygulaması):
+  * Sol sütundaki onay kutularıyla birden çok indirmeyi işaretleyebilirsiniz.
+  * "Tümünü Seç" düğmesi, tablo sol üst köşesindeki "☐" başlığı veya Ctrl+A
+    ile tüm listeyi seçip toplu olarak Duraklat / Devam Et / URL Kopyala / Sil
+    işlemi yapabilirsiniz.
+  * Delete tuşu seçilileri siler, Esc tuşu seçimi temizler.
+
+--------------------------------------------------------------------------------
+4. SORUN GİDERME VE LOGLAR
+--------------------------------------------------------------------------------
+- Masaüstü Logları: Ayarlar → "Log klasörünü aç"
+  (Windows: %APPDATA%\NovaStream\logs | Linux: ~/.config/novastream/logs)
+- Native Host Logu: Windows %TEMP%\novastream_native.log | Linux /tmp/novastream_native.log
+- "Native Host bağlantısı kurulamadı" hatası alırsanız NovaStream → Ayarlar →
+  "Tarayıcı Eklentisini Kur / Yenile" düğmesine basıp tarayıcıyı yeniden başlatın.
+================================================================================

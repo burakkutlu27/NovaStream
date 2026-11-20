@@ -31,7 +31,7 @@ EXT_CATEGORIES = {
     "Videos": ["mp4", "mkv", "webm", "avi", "mov", "flv", "wmv", "m4v", "ts", "m3u8", "mpd"],
     "Music": ["mp3", "m4a", "flac", "wav", "aac", "ogg", "wma", "opus"],
     "Compressed": ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "iso", "dmg"],
-    "Documents": ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub", "csv"],
+    "Documents": ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub", "csv", "srt", "vtt", "ass", "ssa"],
     "Programs": ["exe", "msi", "deb", "rpm", "appimage", "apk", "pkg", "sh"]
 }
 
@@ -53,6 +53,8 @@ DEFAULT_SETTINGS = {
     "minimize_to_tray": True,
     "confirm_extension_downloads": False,
     "default_quality": "best",
+    "download_subtitles": False,
+    "subtitle_langs": "tr,en",
     "last_ytdlp_update": 0,
 }
 
@@ -81,6 +83,9 @@ class DownloadTask:
         task_id=None,
         category=None,
         quality="best",
+        audio_lang=None,
+        audio_name=None,
+        download_subtitles=False,
         external=False
     ):
         self.id = task_id or str(uuid.uuid4())
@@ -93,6 +98,9 @@ class DownloadTask:
         self.headers = headers or {}
         self.cookies = cookies or {}
         self.quality = quality or "best"
+        self.audio_lang = audio_lang
+        self.audio_name = audio_name
+        self.download_subtitles = bool(download_subtitles)
         self.external = external  # indirmeyi tarayıcı eklentisi yapıyor; uygulama yalnızca izliyor
 
         self.filename = title or "download"
@@ -127,6 +135,9 @@ class DownloadTask:
             "is_youtube": self.is_youtube,
             "referer": self.referer,
             "quality": self.quality,
+            "audio_lang": self.audio_lang,
+            "audio_name": self.audio_name,
+            "download_subtitles": self.download_subtitles,
             "external": self.external,
             "status": self.status,
             "percent": self.percent,
@@ -215,6 +226,9 @@ class QueueManager:
                     task_id=item["id"],
                     category=item.get("category"),
                     quality=item.get("quality", "best"),
+                    audio_lang=item.get("audio_lang"),
+                    audio_name=item.get("audio_name"),
+                    download_subtitles=bool(item.get("download_subtitles", False)),
                     external=item.get("external", False)
                 )
                 t.filename = item.get("filename", item.get("title"))
@@ -271,6 +285,9 @@ class QueueManager:
         auto_start=True,
         task_id=None,
         quality=None,
+        audio_lang=None,
+        audio_name=None,
+        download_subtitles=None,
         external=False,
         cookie_text=None
     ):
@@ -284,6 +301,9 @@ class QueueManager:
                 self.save_history()
                 return task
 
+            if download_subtitles is None:
+                download_subtitles = bool(self.settings.get("download_subtitles", False))
+
             task = DownloadTask(
                 url=url,
                 title=title,
@@ -293,6 +313,9 @@ class QueueManager:
                 referer=referer,
                 task_id=task_id,
                 quality=quality or self.settings.get("default_quality", "best"),
+                audio_lang=audio_lang,
+                audio_name=audio_name,
+                download_subtitles=bool(download_subtitles),
                 external=external
             )
             task.category = categorize_file(task.title, is_stream=is_stream or is_youtube)
@@ -418,6 +441,10 @@ class QueueManager:
                 browser_cookies=self.settings.get("cookie_browser") or None,
                 cookie_file=self._write_cookie_file(task),
                 quality=task.quality,
+                audio_lang=task.audio_lang,
+                audio_name=task.audio_name,
+                download_subtitles=bool(task.download_subtitles),
+                subtitle_langs=self.settings.get("subtitle_langs", "tr,en"),
                 on_progress=_on_prog,
                 on_completed=_on_done,
                 on_error=_on_err
@@ -561,6 +588,43 @@ class QueueManager:
         for t in self.snapshot():
             if t.status == "paused":
                 self.resume_task(t.id)
+
+    def pause_tasks(self, task_ids):
+        for tid in list(task_ids or []):
+            self.pause_task(tid)
+
+    def resume_tasks(self, task_ids):
+        for tid in list(task_ids or []):
+            self.resume_task(tid)
+
+    def remove_tasks(self, task_ids, delete_file=False):
+        removed_tasks = []
+        with self.lock:
+            for tid in list(task_ids or []):
+                task = self.tasks.pop(tid, None)
+                if task:
+                    removed_tasks.append(task)
+        if not removed_tasks:
+            return 0
+        for task in removed_tasks:
+            if task.downloader:
+                d = task.downloader
+                task.downloader = None
+                try:
+                    d.cancel(delete_partial=True)
+                except Exception:
+                    logging.exception("İptal hatası")
+            self._drop_cookie_file(task, forget=True)
+            if delete_file and task.status == "completed":
+                target = task.target_path or os.path.join(task.destination_dir, task.filename)
+                if target and os.path.isfile(target):
+                    try:
+                        os.remove(target)
+                    except Exception as e:
+                        logging.warning(f"Dosya silinemedi: {e}")
+        self.save_history()
+        self.check_queue()
+        return len(removed_tasks)
 
     def shutdown(self):
         """Uygulama kapanırken yarım indirmeleri güvenle durdurur (dosyalar korunur)."""

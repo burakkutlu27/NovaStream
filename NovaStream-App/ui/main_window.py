@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QIcon, QAction, QColor
+from PyQt6.QtGui import QIcon, QAction, QColor, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QTableWidget, QTableWidgetItem, QHeaderView, QListWidget,
@@ -53,10 +53,13 @@ class MainWindow(QMainWindow):
         self.current_filter = "All"
         self.progress_dialogs = {}  # task_id -> ProgressDialog
         self.last_clipboard_url = ""
+        self.checked_task_ids = set()
+        self._updating_table = False
 
         self.init_ui()
         self.init_tray()
         self.init_clipboard_monitor()
+        self._init_shortcuts()
 
         # UI güncelleme zamanlayıcısı (500ms)
         self.timer = QTimer(self)
@@ -113,6 +116,12 @@ class MainWindow(QMainWindow):
         self.btn_delete.setProperty("class", "tool-btn")
         self.btn_delete.clicked.connect(self.action_delete_selected)
         tb_layout.addWidget(self.btn_delete)
+
+        self.btn_select_all = QPushButton("Tümünü Seç")
+        self.btn_select_all.setIcon(get_icon("check.svg"))
+        self.btn_select_all.setProperty("class", "tool-btn")
+        self.btn_select_all.clicked.connect(self.toggle_select_all)
+        tb_layout.addWidget(self.btn_select_all)
 
         tb_layout.addStretch()
 
@@ -175,34 +184,36 @@ class MainWindow(QMainWindow):
 
         # Sağ Alan (Tablo)
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
-            "Dosya Adı", "Boyut", "İlerleme", "Hız", "Kalan Süre", "Durum", "Kategori", "Tarih"
+            "☐", "Dosya Adı", "Boyut", "İlerleme", "Hız", "Kalan Süre", "Durum", "Kategori", "Tarih"
         ])
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(28)  # Yüksek bilgi yoğunluğu
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
         self.table.doubleClicked.connect(self.on_row_double_clicked)
+        self.table.itemChanged.connect(self.on_table_item_changed)
+        self.table.itemSelectionChanged.connect(self.update_selection_ui)
 
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Dosya adı
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(2, 130)  # İlerleme
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(0, 32)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Dosya adı
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(3, 130)  # İlerleme
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)
+        header.sectionClicked.connect(self.on_header_clicked)
 
         content_layout.addWidget(self.table)
         main_layout.addWidget(content_widget)
@@ -210,9 +221,12 @@ class MainWindow(QMainWindow):
         # 3. Alt Durum Çubuğu (Status Bar)
         self.status_bar = self.statusBar()
         self.status_lbl_speed = QLabel("Toplam Hız: 0.0 B/s")
+        self.status_lbl_selected = QLabel("")
+        self.status_lbl_selected.setStyleSheet("color: #60a5fa; font-weight: 600; padding: 0 10px;")
         self.status_lbl_bridge = QLabel("")
 
         self.status_bar.addWidget(self.status_lbl_speed)
+        self.status_bar.addWidget(self.status_lbl_selected)
         self.status_bar.addPermanentWidget(self.status_lbl_bridge)
 
     def _update_bridge_status(self):
@@ -230,6 +244,15 @@ class MainWindow(QMainWindow):
     def init_clipboard_monitor(self):
         clipboard = QApplication.clipboard()
         clipboard.dataChanged.connect(self.check_clipboard)
+
+    def _init_shortcuts(self):
+        self._sc_select_all = QShortcut(QKeySequence("Ctrl+A"), self)
+        self._sc_select_all.activated.connect(self.toggle_select_all)
+        self._sc_delete = QShortcut(QKeySequence(Qt.Key.Key_Delete), self.table)
+        self._sc_delete.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._sc_delete.activated.connect(self.action_delete_selected)
+        self._sc_escape = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        self._sc_escape.activated.connect(self.clear_selection)
 
     def check_clipboard(self):
         if not self.queue_manager.settings.get("clipboard_monitor"):
@@ -276,65 +299,88 @@ class MainWindow(QMainWindow):
 
     def refresh_table_data(self, force=False):
         tasks = self.get_filtered_tasks()
+        existing_ids = {t.id for t in self.queue_manager.snapshot()}
+        self.checked_task_ids.intersection_update(existing_ids)
 
-        if self.table.rowCount() != len(tasks) or force:
-            self.table.setRowCount(len(tasks))
+        self._updating_table = True
+        try:
+            if self.table.rowCount() != len(tasks) or force:
+                self.table.setRowCount(len(tasks))
 
-        for row, t in enumerate(tasks):
-            # 0: Dosya Adı
-            item_name = self.table.item(row, 0)
-            if not item_name:
-                item_name = QTableWidgetItem(t.filename)
-                self.table.setItem(row, 0, item_name)
-            else:
-                item_name.setText(t.filename)
-            item_name.setData(Qt.ItemDataRole.UserRole, t.id)
+            for row, t in enumerate(tasks):
+                # 0: Seçim Onay Kutusu
+                chk_item = self.table.item(row, 0)
+                if not chk_item:
+                    chk_item = QTableWidgetItem("")
+                    self.table.setItem(row, 0, chk_item)
+                chk_item.setFlags(
+                    Qt.ItemFlag.ItemIsUserCheckable
+                    | Qt.ItemFlag.ItemIsEnabled
+                    | Qt.ItemFlag.ItemIsSelectable
+                )
+                chk_item.setData(Qt.ItemDataRole.UserRole, t.id)
+                desired_state = Qt.CheckState.Checked if t.id in self.checked_task_ids else Qt.CheckState.Unchecked
+                if chk_item.checkState() != desired_state:
+                    chk_item.setCheckState(desired_state)
 
-            # 1: Boyut
-            tot_str = format_bytes(t.total_bytes) if t.total_bytes > 0 else (format_bytes(t.downloaded_bytes) if t.downloaded_bytes > 0 else "-")
-            self._set_cell(row, 1, tot_str)
-
-            # 2: İlerleme Çubuğu
-            prog_widget = self.table.cellWidget(row, 2)
-            if not isinstance(prog_widget, QProgressBar):
-                prog_widget = QProgressBar()
-                prog_widget.setRange(0, 100)
-                self.table.setCellWidget(row, 2, prog_widget)
-            prog_widget.setValue(int(t.percent))
-
-            # 3: Hız
-            self._set_cell(row, 3, t.speed)
-
-            # 4: Kalan Süre
-            self._set_cell(row, 4, t.eta)
-
-            # 5: Durum
-            status_tr = {
-                "downloading": "İndiriliyor",
-                "completed": "Tamamlandı",
-                "paused": "Duraklatıldı",
-                "queued": "Kuyrukta",
-                "error": "Hata"
-            }.get(t.status, t.status.capitalize())
-            status_item = self._set_cell(row, 5, status_tr)
-            if status_item:
-                if t.status == "error":
-                    status_item.setForeground(QColor("#f87171"))
-                    if t.error_message:
-                        status_item.setToolTip(f"Hata Nedeni: {t.error_message}")
+                # 1: Dosya Adı
+                item_name = self.table.item(row, 1)
+                if not item_name:
+                    item_name = QTableWidgetItem(t.filename)
+                    self.table.setItem(row, 1, item_name)
                 else:
-                    status_item.setForeground(QColor("#e4e6eb"))
-                    status_item.setToolTip("")
+                    item_name.setText(t.filename)
+                item_name.setData(Qt.ItemDataRole.UserRole, t.id)
 
-            # 6: Kategori
-            self._set_cell(row, 6, t.category)
+                # 2: Boyut
+                tot_str = format_bytes(t.total_bytes) if t.total_bytes > 0 else (format_bytes(t.downloaded_bytes) if t.downloaded_bytes > 0 else "-")
+                self._set_cell(row, 2, tot_str)
 
-            # 7: Tarih
-            self._set_cell(row, 7, t.created_at)
+                # 3: İlerleme Çubuğu
+                prog_widget = self.table.cellWidget(row, 3)
+                if not isinstance(prog_widget, QProgressBar):
+                    prog_widget = QProgressBar()
+                    prog_widget.setRange(0, 100)
+                    self.table.setCellWidget(row, 3, prog_widget)
+                prog_widget.setValue(int(t.percent))
 
-            # İlerleme penceresi açıksa güncelle
-            if t.id in self.progress_dialogs:
-                self.progress_dialogs[t.id].update_data(t)
+                # 4: Hız
+                self._set_cell(row, 4, t.speed)
+
+                # 5: Kalan Süre
+                self._set_cell(row, 5, t.eta)
+
+                # 6: Durum
+                status_tr = {
+                    "downloading": "İndiriliyor",
+                    "completed": "Tamamlandı",
+                    "paused": "Duraklatıldı",
+                    "queued": "Kuyrukta",
+                    "error": "Hata"
+                }.get(t.status, t.status.capitalize())
+                status_item = self._set_cell(row, 6, status_tr)
+                if status_item:
+                    if t.status == "error":
+                        status_item.setForeground(QColor("#f87171"))
+                        if t.error_message:
+                            status_item.setToolTip(f"Hata Nedeni: {t.error_message}")
+                    else:
+                        status_item.setForeground(QColor("#e4e6eb"))
+                        status_item.setToolTip("")
+
+                # 7: Kategori
+                self._set_cell(row, 7, t.category)
+
+                # 8: Tarih
+                self._set_cell(row, 8, t.created_at)
+
+                # İlerleme penceresi açıksa güncelle
+                if t.id in self.progress_dialogs:
+                    self.progress_dialogs[t.id].update_data(t)
+        finally:
+            self._updating_table = False
+
+        self.update_selection_ui()
 
         # Durum çubuğu: tüm aktif indirmelerin toplam hızı
         active = [t for t in self.queue_manager.snapshot() if t.status == "downloading"]
@@ -350,14 +396,112 @@ class MainWindow(QMainWindow):
             item.setText(text)
         return item
 
-    def get_selected_task_id_and_task(self):
-        row = self.table.currentRow()
-        if row >= 0:
-            item = self.table.item(row, 0)
+    def _visible_task_ids(self):
+        ids = []
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0) or self.table.item(row, 1)
             if item:
                 tid = item.data(Qt.ItemDataRole.UserRole)
-                task = self.queue_manager.tasks.get(tid)
-                return tid, task
+                if tid:
+                    ids.append(tid)
+        return ids
+
+    def on_table_item_changed(self, item):
+        if self._updating_table or item.column() != 0:
+            return
+        tid = item.data(Qt.ItemDataRole.UserRole)
+        if not tid:
+            return
+        if item.checkState() == Qt.CheckState.Checked:
+            self.checked_task_ids.add(tid)
+        else:
+            self.checked_task_ids.discard(tid)
+        self.update_selection_ui()
+
+    def on_header_clicked(self, logical_index):
+        if logical_index == 0:
+            self.toggle_select_all()
+
+    def toggle_select_all(self):
+        visible_ids = self._visible_task_ids()
+        if not visible_ids:
+            return
+        all_checked = all(tid in self.checked_task_ids for tid in visible_ids)
+        self._updating_table = True
+        try:
+            if all_checked:
+                for tid in visible_ids:
+                    self.checked_task_ids.discard(tid)
+                for row in range(self.table.rowCount()):
+                    item = self.table.item(row, 0)
+                    if item:
+                        item.setCheckState(Qt.CheckState.Unchecked)
+                self.table.clearSelection()
+            else:
+                self.checked_task_ids.update(visible_ids)
+                for row in range(self.table.rowCount()):
+                    item = self.table.item(row, 0)
+                    if item:
+                        item.setCheckState(Qt.CheckState.Checked)
+                self.table.selectAll()
+        finally:
+            self._updating_table = False
+        self.update_selection_ui()
+
+    def clear_selection(self):
+        self._updating_table = True
+        try:
+            self.checked_task_ids.clear()
+            for row in range(self.table.rowCount()):
+                item = self.table.item(row, 0)
+                if item:
+                    item.setCheckState(Qt.CheckState.Unchecked)
+            self.table.clearSelection()
+        finally:
+            self._updating_table = False
+        self.update_selection_ui()
+
+    def get_selected_task_ids(self):
+        visible_ids = self._visible_task_ids()
+        checked = [tid for tid in visible_ids if tid in self.checked_task_ids]
+        if checked:
+            return checked
+        sel_model = self.table.selectionModel()
+        if sel_model:
+            rows = sorted(idx.row() for idx in sel_model.selectedRows())
+            selected = []
+            for row in rows:
+                item = self.table.item(row, 0) or self.table.item(row, 1)
+                if item:
+                    tid = item.data(Qt.ItemDataRole.UserRole)
+                    if tid and tid not in selected:
+                        selected.append(tid)
+            if selected:
+                return selected
+        row = self.table.currentRow()
+        if 0 <= row < len(visible_ids):
+            return [visible_ids[row]]
+        return []
+
+    def update_selection_ui(self):
+        visible_ids = self._visible_task_ids()
+        all_checked = bool(visible_ids) and all(tid in self.checked_task_ids for tid in visible_ids)
+        hdr = self.table.horizontalHeaderItem(0)
+        if hdr:
+            hdr.setText("☑" if all_checked else "☐")
+        self.btn_select_all.setText("Seçimi Kaldır" if all_checked else "Tümünü Seç")
+
+        n = len(self.get_selected_task_ids())
+        self.btn_resume.setText(f"Devam Et ({n})" if n > 1 else "Devam Et")
+        self.btn_pause.setText(f"Duraklat ({n})" if n > 1 else "Duraklat")
+        self.btn_delete.setText(f"Sil ({n})" if n > 1 else "Sil")
+        self.status_lbl_selected.setText(f"{n} öğe seçili" if n > 0 else "")
+
+    def get_selected_task_id_and_task(self):
+        tids = self.get_selected_task_ids()
+        if tids:
+            tid = tids[0]
+            return tid, self.queue_manager.get_task(tid)
         return None, None
 
     def get_selected_task(self):
@@ -380,11 +524,55 @@ class MainWindow(QMainWindow):
             dlg.activateWindow()
 
     def show_context_menu(self, pos):
-        tid, task = self.get_selected_task_id_and_task()
-        if not tid:
+        idx = self.table.indexAt(pos)
+        if idx.isValid():
+            item = self.table.item(idx.row(), 0)
+            tid_at = item.data(Qt.ItemDataRole.UserRole) if item else None
+            if tid_at and tid_at not in self.checked_task_ids and not self.table.selectionModel().isRowSelected(idx.row(), idx.parent()):
+                self.table.selectRow(idx.row())
+
+        tids = self.get_selected_task_ids()
+        if not tids:
             return
 
         menu = QMenu(self)
+
+        if len(tids) > 1:
+            n = len(tids)
+            act_resume_all = QAction(get_icon("play.svg"), f"Seçilileri Devam Ettir ({n})", self)
+            act_resume_all.triggered.connect(lambda: self.queue_manager.resume_tasks(tids))
+            menu.addAction(act_resume_all)
+
+            act_pause_all = QAction(get_icon("pause.svg"), f"Seçilileri Duraklat ({n})", self)
+            act_pause_all.triggered.connect(lambda: self.queue_manager.pause_tasks(tids))
+            menu.addAction(act_pause_all)
+
+            menu.addSeparator()
+
+            urls = []
+            for tid in tids:
+                t = self.queue_manager.get_task(tid)
+                if t and t.url:
+                    urls.append(t.url)
+            if urls:
+                act_copy_urls = QAction(f"URL'leri Kopyala ({len(urls)})", self)
+                act_copy_urls.triggered.connect(lambda: QApplication.clipboard().setText("\n".join(urls)))
+                menu.addAction(act_copy_urls)
+                menu.addSeparator()
+
+            act_del_list = QAction(f"Seçilileri Listeden Kaldır ({n})", self)
+            act_del_list.triggered.connect(lambda: self.delete_tasks(tids, delete_file=False))
+            menu.addAction(act_del_list)
+
+            act_del_file = QAction(f"Seçilileri Dosyayla Birlikte Sil ({n})...", self)
+            act_del_file.triggered.connect(self.action_delete_selected)
+            menu.addAction(act_del_file)
+
+            menu.exec(self.table.viewport().mapToGlobal(pos))
+            return
+
+        tid = tids[0]
+        task = self.queue_manager.get_task(tid)
 
         if task:
             if task.status == "downloading":
@@ -429,6 +617,14 @@ class MainWindow(QMainWindow):
 
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
+    def delete_tasks(self, task_ids, delete_file=False):
+        if not task_ids:
+            return
+        self.queue_manager.remove_tasks(task_ids, delete_file=delete_file)
+        for tid in task_ids:
+            self.checked_task_ids.discard(tid)
+        self.refresh_table_data(force=True)
+
     def delete_task(self, task_id, delete_file=False):
         removed = self.queue_manager.remove_task(task_id, delete_file=delete_file)
         if not removed:
@@ -436,29 +632,37 @@ class MainWindow(QMainWindow):
             tasks = self.get_filtered_tasks()
             if 0 <= row < len(tasks):
                 self.queue_manager.remove_task(tasks[row].id, delete_file=delete_file)
+        self.checked_task_ids.discard(task_id)
         self.refresh_table_data(force=True)
 
     def action_resume_selected(self):
-        task = self.get_selected_task()
-        if task:
-            self.queue_manager.resume_task(task.id)
+        tids = self.get_selected_task_ids()
+        if tids:
+            self.queue_manager.resume_tasks(tids)
 
     def action_pause_selected(self):
-        task = self.get_selected_task()
-        if task:
-            self.queue_manager.pause_task(task.id)
+        tids = self.get_selected_task_ids()
+        if tids:
+            self.queue_manager.pause_tasks(tids)
 
     def action_delete_selected(self):
-        tid, task = self.get_selected_task_id_and_task()
-        if not tid:
+        tids = self.get_selected_task_ids()
+        if not tids:
             return
 
-        filename = task.filename if task else "Seçili indirme"
+        if len(tids) == 1:
+            task = self.queue_manager.get_task(tids[0])
+            filename = task.filename if task else "Seçili indirme"
+            title_text = f"'{filename}' silinsin mi?"
+            info_text = "İndirilen dosyayı diskten de kalıcı olarak silmek istiyor musunuz?"
+        else:
+            title_text = f"{len(tids)} seçili indirme silinsin mi?"
+            info_text = "Seçili indirmelere ait diskteki dosyaları da kalıcı olarak silmek istiyor musunuz?"
 
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("İndirmeyi Sil")
-        msg_box.setText(f"'{filename}' silinsin mi?")
-        msg_box.setInformativeText("İndirilen dosyayı diskten de kalıcı olarak silmek istiyor musunuz?")
+        msg_box.setText(title_text)
+        msg_box.setInformativeText(info_text)
 
         btn_delete_both = msg_box.addButton("Dosyayla Birlikte Sil", QMessageBox.ButtonRole.DestructiveRole)
         btn_remove_only = msg_box.addButton("Yalnızca Listeden Kaldır", QMessageBox.ButtonRole.ActionRole)
@@ -478,9 +682,9 @@ class MainWindow(QMainWindow):
         msg_box.exec()
         clicked = msg_box.clickedButton()
         if clicked == btn_delete_both:
-            self.delete_task(tid, delete_file=True)
+            self.delete_tasks(tids, delete_file=True)
         elif clicked == btn_remove_only:
-            self.delete_task(tid, delete_file=False)
+            self.delete_tasks(tids, delete_file=False)
 
     def open_add_download_dialog(self):
         clipboard_text = QApplication.clipboard().text().strip()
@@ -494,6 +698,7 @@ class MainWindow(QMainWindow):
         info = dict(info)
         info.setdefault("default_dir", self.queue_manager.download_dir())
         info.setdefault("default_quality", self.queue_manager.settings.get("default_quality", "best"))
+        info.setdefault("default_subtitles", bool(self.queue_manager.settings.get("download_subtitles", False)))
         return info
 
     def handle_external_download_request(self, data):
@@ -517,6 +722,7 @@ class MainWindow(QMainWindow):
             referer=payload.get("referer"),
             auto_start=payload.get("auto_start", True),
             quality=payload.get("quality"),
+            download_subtitles=payload.get("download_subtitles"),
             cookie_text=cookie_text
         )
         self.refresh_table_data(force=True)

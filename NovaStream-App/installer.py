@@ -16,15 +16,21 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtWidgets import (
+from PyQt6.QtCore import Qt, QThread, pyqtSignal  # noqa: E402
+from PyQt6.QtGui import QIcon, QPixmap  # noqa: E402
+from PyQt6.QtWidgets import (  # noqa: E402
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QStackedWidget, QWidget, QLineEdit, QFileDialog,
-    QCheckBox, QProgressBar, QMessageBox
+    QCheckBox, QProgressBar, QMessageBox, QTextEdit
 )
 
-from ui.styles import MAIN_STYLESHEET
+from core.browser_setup import (  # noqa: E402
+    auto_install_extensions,
+    detect_browsers,
+    open_browser_extensions_page,
+    reveal_path_in_file_manager,
+)
+from ui.styles import MAIN_STYLESHEET  # noqa: E402
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WINDOWS = sys.platform == "win32"
@@ -128,6 +134,7 @@ class InstallWorker(QThread):
         super().__init__()
         self.target_dir = target_dir
         self.options = options  # desktop_shortcut, menu_shortcut, browser_integration
+        self.last_setup_result = None
 
     def _run(self, cmd, **kw):
         kw.setdefault("check", True)
@@ -143,7 +150,7 @@ class InstallWorker(QThread):
             self.progress_changed.emit(5, "Hedef klasör hazırlanıyor...")
             os.makedirs(self.target_dir, exist_ok=True)
 
-            # 1. Uygulama dosyaları
+            # 1. Uygulama dosyaları ve rehberler
             self.progress_changed.emit(15, "NovaStream dosyaları kopyalanıyor...")
             for d in ("core", "ui", "assets"):
                 src, dst = os.path.join(APP_DIR, d), os.path.join(self.target_dir, d)
@@ -155,9 +162,15 @@ class InstallWorker(QThread):
                 src = os.path.join(APP_DIR, f)
                 if os.path.exists(src):
                     shutil.copy2(src, os.path.join(self.target_dir, f))
+            for doc in ("BENI-OKU.txt", "KULLANIM-KILAVUZU.txt"):
+                for base in (APP_DIR, SOURCE_ROOT):
+                    src = os.path.join(base, doc)
+                    if os.path.isfile(src):
+                        shutil.copy2(src, os.path.join(self.target_dir, doc))
+                        break
 
-            # 2. Tarayıcı entegrasyonu dosyaları (native host + eklenti klasörleri) tek yerde
-            self.progress_changed.emit(25, "Tarayıcı eklentisi dosyaları kopyalanıyor...")
+            # 2. Tarayıcı entegrasyonu dosyaları (native host + eklenti klasörleri + hazır paketler)
+            self.progress_changed.emit(25, "Tarayıcı eklentisi dosyaları ve paketleri kopyalanıyor...")
             browser_dir = os.path.join(self.target_dir, "browser")
             os.makedirs(browser_dir, exist_ok=True)
             for f in ("native_host.py", "native_host.bat", "native_host.sh"):
@@ -171,6 +184,15 @@ class InstallWorker(QThread):
                     if os.path.exists(dst):
                         shutil.rmtree(dst)
                     shutil.copytree(src, dst)
+
+            pkg_dst = os.path.join(browser_dir, "packages")
+            os.makedirs(pkg_dst, exist_ok=True)
+            for pkg_src in (os.path.join(APP_DIR, "browser_packages"), os.path.join(SOURCE_ROOT, "dist", "extensions")):
+                if os.path.isdir(pkg_src):
+                    for name in os.listdir(pkg_src):
+                        sp = os.path.join(pkg_src, name)
+                        if os.path.isfile(sp):
+                            shutil.copy2(sp, os.path.join(pkg_dst, name))
 
             # 3. Python çalışma ortamı: gömülü (Windows) veya venv
             self.progress_changed.emit(35, "Python çalışma ortamı hazırlanıyor (birkaç dakika sürebilir)...")
@@ -187,15 +209,15 @@ class InstallWorker(QThread):
                         os.chmod(p, 0o755)
 
             # 5. Kısayollar
-            self.progress_changed.emit(85, "Kısayollar oluşturuluyor...")
+            self.progress_changed.emit(82, "Kısayollar oluşturuluyor...")
             self._create_shortcuts()
 
-            # 6. Tarayıcı köprüsü kaydı
+            # 6. Tarayıcı köprüsü + eklenti paketleme & profil algılama
             if self.options.get("browser_integration"):
-                self.progress_changed.emit(95, "Tarayıcı köprüleri (Chrome, Edge, Brave, Firefox) kaydediliyor...")
-                sys.path.insert(0, os.path.join(self.target_dir))
-                from core.native_messaging import register
-                register(browser_dir)
+                self.progress_changed.emit(92, "Tarayıcı profilleri bulunuyor ve eklenti paketleri kuruluyor...")
+                if self.target_dir not in sys.path:
+                    sys.path.insert(0, self.target_dir)
+                self.last_setup_result = auto_install_extensions(browser_dir)
 
             self.progress_changed.emit(100, "Kurulum tamamlandı!")
             self.finished_signal.emit(True, browser_dir)
@@ -211,10 +233,8 @@ class InstallWorker(QThread):
             dst = os.path.join(self.target_dir, "runtime")
             if os.path.normcase(os.path.abspath(dst)) != os.path.normcase(os.path.abspath(bundled_runtime)):
                 self.progress_changed.emit(40, "Gömülü Python kopyalanıyor...")
-                # Tarayıcının açık tuttuğu native host ya da açık uygulama python.exe'yi kilitler.
                 stop_runtime_processes(dst)
                 mirror_tree(bundled_runtime, dst)
-            # Eski venv kurulumundan kalan klasör karışıklık yaratmasın
             old_venv = os.path.join(self.target_dir, "venv")
             if os.path.isdir(old_venv):
                 shutil.rmtree(old_venv, ignore_errors=True)
@@ -235,7 +255,8 @@ class InstallWorker(QThread):
                 self.progress_changed.emit(68, "yt-dlp kuruluyor...")
                 self._run([py, "-m", "pip", "install", "--quiet", "-U", "yt-dlp[default]", "deno"], check=False)
 
-        if shutil.which("ffmpeg"):
+        bundled_ffmpeg = os.path.join(self.target_dir, "runtime", "bin", "ffmpeg.exe" if IS_WINDOWS else "ffmpeg")
+        if os.path.isfile(bundled_ffmpeg) or shutil.which("ffmpeg"):
             return
         if IS_WINDOWS:
             pkgs = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Packages")
@@ -266,9 +287,8 @@ class InstallWorker(QThread):
                 places.append("[Environment]::GetFolderPath('Programs')")
             pyw = target_python(self.target_dir, windowed=True)
             main_py = os.path.join(self.target_dir, "main.py")
-            # pythonw.exe'yi doğrudan açan kısayol: açılışta konsol penceresi yanıp sönmez
             target, args = (pyw, f'"{main_py}"') if pyw else (target_bat, "")
-            def q(x):  # PowerShell tek tırnak kaçışı
+            def q(x):
                 return str(x).replace("'", "''")
             for place in places:
                 ps = (
@@ -327,8 +347,11 @@ class InstallerWizard(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("NovaStream - Kurulum Sihirbazı")
-        self.resize(580, 420)
-        self.setFixedSize(580, 420)
+        self.resize(620, 480)
+        self.setMinimumSize(620, 480)
+
+        self.detected_browsers = detect_browsers()
+        self.installed_browser_dir = None
 
         icon_path = os.path.join(APP_DIR, "assets", "icon48.png")
         if os.path.exists(icon_path):
@@ -342,7 +365,6 @@ class InstallerWizard(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Üst Başlık Banner
         header = QWidget()
         header.setStyleSheet("background-color: #0f172a; border-bottom: 1px solid #1e293b;")
         h_layout = QHBoxLayout(header)
@@ -366,7 +388,6 @@ class InstallerWizard(QDialog):
 
         layout.addWidget(header)
 
-        # Çok Sayfalı Alan (QStackedWidget)
         self.stack = QStackedWidget()
         layout.addWidget(self.stack)
 
@@ -380,7 +401,6 @@ class InstallerWizard(QDialog):
         self.stack.addWidget(self.page_progress)  # 2
         self.stack.addWidget(self.page_finish)    # 3
 
-        # Alt Buton Çubuğu
         footer = QWidget()
         footer.setStyleSheet("background-color: #0f172a; border-top: 1px solid #1e293b;")
         f_layout = QHBoxLayout(footer)
@@ -418,11 +438,11 @@ class InstallerWizard(QDialog):
 
         desc = QLabel(
             "Bu sihirbaz, NovaStream İndirme Yöneticisi'ni bilgisayarınıza kuracak,\n"
-            "masaüstü kısayollarını hazırlayacak ve Chrome ile Firefox tarayıcı\n"
-            "entegrasyonlarını otomatik olarak yapılandıracaktır.\n\n"
-            "• 16 Kanallı Turbo Dinamik İndirme Motoru (IDM Hızında)\n"
-            "• YouTube 4K/8K ve HLS Medya Yakalama\n"
-            "• Modern Koyu Arayüz ve Sistem Tepsisi Bildirimleri\n\n"
+            "masaüstü kısayollarını hazırlayacak ve algılanan tarayıcılarla\n"
+            "köprü ve eklenti paketlerini otomatik olarak yapılandıracaktır.\n\n"
+            "• 16 Kanallı Turbo Dinamik İndirme Motoru (HTTP 429 Korumalı)\n"
+            "• YouTube 4K/8K, HLS, Rapidrame/Close ve Altyazı (SRT) Desteği\n"
+            "• Çoklu Seçim, Paketli Eklentiler (.xpi / .zip) ve Otomatik Algılama\n\n"
             "Devam etmek için 'İleri' butonuna tıklayın."
         )
         desc.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.5;")
@@ -450,7 +470,7 @@ class InstallerWizard(QDialog):
         dir_box.addWidget(self.dir_btn)
         l.addLayout(dir_box)
 
-        l.addSpacing(6)
+        l.addSpacing(4)
         l.addWidget(QLabel("Ek Seçenekler:"))
 
         self.chk_desktop = QCheckBox("Masaüstüne NovaStream kısayolu oluştur")
@@ -461,9 +481,15 @@ class InstallerWizard(QDialog):
         self.chk_menu.setChecked(True)
         l.addWidget(self.chk_menu)
 
-        self.chk_browser = QCheckBox("Chrome, Firefox ve Brave tarayıcı köprülerini otomatik kaydet")
+        self.chk_browser = QCheckBox("Algılanan tarayıcılara köprü + eklenti paketlerini otomatik kur")
         self.chk_browser.setChecked(True)
         l.addWidget(self.chk_browser)
+
+        detected_names = ", ".join(b["name"] for b in self.detected_browsers) if self.detected_browsers else "Yok (manuel yükleme gösterilecek)"
+        det_lbl = QLabel(f"Algılanan tarayıcılar: {detected_names}")
+        det_lbl.setWordWrap(True)
+        det_lbl.setStyleSheet("color: #38bdf8; font-size: 11.5px; padding-top: 4px;")
+        l.addWidget(det_lbl)
 
         l.addStretch()
         return w
@@ -493,8 +519,8 @@ class InstallerWizard(QDialog):
     def create_page_finish(self):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.setContentsMargins(24, 30, 24, 30)
-        l.setSpacing(14)
+        l.setContentsMargins(22, 18, 22, 14)
+        l.setSpacing(10)
 
         header_layout = QHBoxLayout()
         check_icon_path = os.path.join(APP_DIR, "assets", "icons", "check.svg")
@@ -509,18 +535,67 @@ class InstallerWizard(QDialog):
         header_layout.addStretch()
         l.addLayout(header_layout)
 
-        self.finish_desc = QLabel("NovaStream bilgisayarınıza başarıyla kuruldu.")
-        self.finish_desc.setWordWrap(True)
-        self.finish_desc.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.finish_desc.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.5;")
+        self.finish_desc = QTextEdit()
+        self.finish_desc.setReadOnly(True)
+        self.finish_desc.setStyleSheet(
+            "background-color: #16181d; border: 1px solid #2d3038; border-radius: 5px; "
+            "padding: 8px; color: #cbd5e1; font-size: 12px;"
+        )
+        self.finish_desc.setMinimumHeight(180)
         l.addWidget(self.finish_desc)
+
+        btn_row = QHBoxLayout()
+        self.btn_open_chrome_dir = QPushButton("Chrome/Edge/Brave Klasörünü Göster")
+        self.btn_open_chrome_dir.setProperty("class", "tool-btn")
+        self.btn_open_chrome_dir.clicked.connect(self._reveal_chrome_dir)
+        btn_row.addWidget(self.btn_open_chrome_dir)
+
+        self.btn_open_ff_file = QPushButton("Firefox Dosyasını Göster")
+        self.btn_open_ff_file.setProperty("class", "tool-btn")
+        self.btn_open_ff_file.clicked.connect(self._reveal_firefox_file)
+        btn_row.addWidget(self.btn_open_ff_file)
+        l.addLayout(btn_row)
+
+        btn_row2 = QHBoxLayout()
+        self.btn_open_ext_page = QPushButton("Tarayıcı Uzantı Sayfasını Aç")
+        self.btn_open_ext_page.setProperty("class", "tool-btn")
+        self.btn_open_ext_page.clicked.connect(self._open_first_browser_page)
+        btn_row2.addWidget(self.btn_open_ext_page)
+
+        self.btn_open_readme = QPushButton("BENİ OKU Rehberini Aç")
+        self.btn_open_readme.setProperty("class", "tool-btn")
+        self.btn_open_readme.clicked.connect(self._open_readme)
+        btn_row2.addWidget(self.btn_open_readme)
+        l.addLayout(btn_row2)
 
         self.chk_launch = QCheckBox("NovaStream'i Şimdi Başlat")
         self.chk_launch.setChecked(True)
         l.addWidget(self.chk_launch)
 
-        l.addStretch()
         return w
+
+    def _reveal_chrome_dir(self):
+        if self.installed_browser_dir:
+            reveal_path_in_file_manager(os.path.join(self.installed_browser_dir, "chrome"))
+
+    def _reveal_firefox_file(self):
+        if self.installed_browser_dir:
+            reveal_path_in_file_manager(os.path.join(self.installed_browser_dir, "firefox", "manifest.json"))
+
+    def _open_first_browser_page(self):
+        if self.detected_browsers:
+            open_browser_extensions_page(self.detected_browsers[0])
+
+    def _open_readme(self):
+        target_dir = self.dir_input.text().strip()
+        for name in ("BENI-OKU.txt", "KULLANIM-KILAVUZU.txt"):
+            p = os.path.join(target_dir, name)
+            if os.path.isfile(p):
+                if IS_WINDOWS:
+                    os.startfile(p)
+                else:
+                    subprocess.Popen(["xdg-open", p])
+                return
 
     def browse_dir(self):
         chosen = QFileDialog.getExistingDirectory(self, "Kurulum Klasörü Seç", self.dir_input.text())
@@ -540,7 +615,6 @@ class InstallerWizard(QDialog):
             self.btn_cancel.setVisible(False)
             self.start_installation()
         elif idx == 3:
-            # Bitir
             if self.chk_launch.isChecked():
                 self.launch_installed_app()
             self.accept()
@@ -572,14 +646,24 @@ class InstallerWizard(QDialog):
     def on_finished(self, success, message):
         if success:
             browser_dir = message
-            self.finish_desc.setText(
-                "NovaStream bilgisayarınıza başarıyla kuruldu.\n\n"
-                "Tarayıcı eklentisini bu klasörlerden yükleyin (bir kez):\n"
-                f"• Chrome / Edge / Brave: {os.path.join(browser_dir, 'chrome')}\n"
-                "   (Uzantılar → Geliştirici modu → Paketlenmemiş öğe yükle)\n"
-                f"• Firefox: {os.path.join(browser_dir, 'firefox', 'manifest.json')}\n"
-                "   (about:debugging → Bu Firefox → Geçici eklenti yükle)"
-            )
+            self.installed_browser_dir = browser_dir
+            lines = ["NovaStream bilgisayarınıza başarıyla kuruldu.\n"]
+            res = getattr(self.worker, "last_setup_result", None)
+            if res and res.get("browsers"):
+                lines.append("Algılanan Tarayıcılar ve Durum:")
+                for b in res["browsers"]:
+                    lines.append(f"• {b['name']}: {b['detail']}")
+                lines.append("")
+            lines.extend([
+                "Tarayıcı izin vermediğinde manuel eklenti yükleme konumları:",
+                f"• Chrome / Edge / Brave / Opera / Vivaldi (Paketlenmemiş öğe yükle KLASÖRÜ):",
+                f"  {os.path.join(browser_dir, 'chrome')}",
+                f"• Firefox (about:debugging → Geçici Eklenti Yükle DOSYASI):",
+                f"  {os.path.join(browser_dir, 'firefox', 'manifest.json')}",
+                f"• Paketli eklentiler (.xpi / .zip / .crx):",
+                f"  {os.path.join(browser_dir, 'packages')}",
+            ])
+            self.finish_desc.setPlainText("\n".join(lines))
             self.stack.setCurrentIndex(3)
             self.btn_next.setVisible(True)
             self.btn_next.setText("Bitir")
@@ -619,7 +703,7 @@ def run_silent(argv):
     result = {}
     worker.progress_changed.connect(lambda p, t: print(f"[{p:3d}%] {t}", flush=True))
     worker.finished_signal.connect(lambda ok, msg: result.update(ok=ok, msg=msg))
-    worker.run()  # aynı iş parçacığında, senkron
+    worker.run()
     print(("[OK] " if result.get("ok") else "[HATA] ") + str(result.get("msg")), flush=True)
     return 0 if result.get("ok") else 1
 

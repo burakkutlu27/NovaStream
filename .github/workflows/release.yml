@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Sürüm etiketi (ör. v2.5.0)"
+        required: false
+        default: ""
+
+jobs:
+  package-extensions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Paketleme araçları
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pycryptodomex
+      - name: Eklentileri paketle (.zip, .crx, .xpi)
+        run: python tools/package_extensions.py --out dist/extensions --with-id-name
+      - name: Linux kaynak paketi oluştur
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME}"
+          mkdir -p dist/linux
+          tar --exclude='.git' --exclude='dist' --exclude='NovaStream-App/runtime' --exclude='NovaStream-App/venv' --exclude='__pycache__' --exclude='*.exe' --exclude='*.pem' -czf "dist/linux/NovaStream-Linux-${VER}.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-packages
+          path: dist/extensions/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: dist/linux/*
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Gömülü Python ve FFmpeg paketi
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pycryptodomex
+          powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1 -IncludeFFmpeg
+      - name: Eklenti paketlerini kurulum içine ekle
+        run: |
+          python tools/sync_extensions.py
+          python tools/package_extensions.py --out NovaStream-App/browser_packages --with-id-name
+      - name: Inno Setup ile Windows kurulum .exe oluştur
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup (ISCC.exe) bulunamadi" }
+          & $iscc "NovaStream-App\NovaStream_Setup.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force -Path dist\windows | Out-Null
+          $outExe = Get-ChildItem -Path "NovaStream-App\Output" -Filter "*.exe" | Select-Object -First 1
+          Copy-Item $outExe.FullName -Destination "dist\windows\NovaStream-Kurulum-${env:GITHUB_REF_NAME}.exe" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/windows/*.exe
+
+  publish-release:
+    needs: [package-extensions, build-windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: SHA256SUMS oluştur
+        shell: bash
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          ls -lh
+      - name: GitHub Release Yayınla
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "NovaStream ${{ github.ref_name }}"
+          body_path: RELEASE_NOTES.md
+          files: release-assets/*
+          draft: false
+          prerelease: false
