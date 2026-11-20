@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Bağımlılıklar
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r NovaStream-App/requirements.txt pytest pyflakes
+      - name: Statik kontrol (tanımsız isimler, eksik import)
+        run: python -m pyflakes NovaStream-App/core NovaStream-App/ui NovaStream-App/main.py NovaStream-App/installer.py NovaStream-v2/native_host.py
+      - name: Eklenti kopyaları senkron mu
+        run: |
+          python tools/sync_extensions.py
+          git diff --exit-code -- NovaStream-Firefox
+      - name: Testler
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q NovaStream-App/tests
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: JavaScript sözdizimi
+        run: |
+          for f in NovaStream-v2/OpenVideoDownloader-Extension/*.js NovaStream-v2/OpenVideoDownloader-Extension/popup/*.js; do node --check "$f"; done

@@ -1,0 +1,80 @@
+========================================================================
+                      NovaStream İndirme Yöneticisi 2.4.3
+                        (Windows ve Linux sürümü)
+========================================================================
+
+NovaStream; çok bağlantılı hızlı indirme, YouTube/HLS/DASH video indirme
+ve tarayıcı eklentisi entegrasyonu olan bağımsız bir indirme yöneticisidir.
+
+------------------------------------------------------------------------
+1. WINDOWS KURULUMU
+------------------------------------------------------------------------
+1) "NovaStream-Kurulum-2.4.3.exe" dosyasını çalıştırın ve sihirbazı izleyin.
+   - Windows "Bilinmeyen yayımcı" uyarısı verirse: "Ek bilgi" →
+     "Yine de çalıştır" (kurulum dosyası imzasız olduğu için normaldir).
+   - Kurulumun içinde gömülü Python vardır; bilgisayarınızda Python
+     kurulu olması GEREKMEZ. Yönetici izni istemez.
+   - Sihirbaz uygulamayı %LOCALAPPDATA%\NovaStream klasörüne kurar,
+     kısayolları oluşturur, tarayıcı köprüsünü kaydeder ve FFmpeg
+     yoksa winget ile kurar.
+   - Güncellerken aynı exe'nin yenisini çalıştırmanız yeterlidir; açık
+     uygulama ve tarayıcı köprüsü kurulum sırasında kapatılır.
+   - Geliştiriciler için: kaynak koddan kurmak isterseniz önce
+     tools\build_windows_bundle.ps1 ile gömülü Python'u hazırlayıp
+     sonra "Kurulum-Windows.bat" çalıştırın.
+
+2) Tarayıcı eklentisini yükleyin (bir kez):
+   * Chrome / Edge / Brave:
+     - "chrome://extensions" adresini açın, "Geliştirici modu"nu açın.
+     - "Paketlenmemiş öğe yükle" ile şu klasörü seçin (güncellemeden
+       sonra aynı sayfada eklentinin yenile ↻ düğmesine basın):
+       %LOCALAPPDATA%\NovaStream\browser\chrome
+     - Eklenti kimliği her bilgisayarda aynıdır: phbdcgdmpmgacehbfkkjbmjofdhhhohg
+   * Firefox:
+     - "about:debugging#/runtime/this-firefox" adresini açın.
+     - "Geçici Eklenti Yükle" ile şu dosyayı seçin:
+       %LOCALAPPDATA%\NovaStream\browser\firefox\manifest.json
+
+------------------------------------------------------------------------
+2. LINUX KURULUMU
+------------------------------------------------------------------------
+1) "Kurulum-Linux.desktop" dosyasına çift tıklayın
+   (veya terminalde: NovaStream-App/run_installer.sh).
+   - Uygulama ~/.local/share/NovaStream klasörüne kurulur.
+   - FFmpeg yoksa yönetici şifresi sorularak kurulur.
+2) Eklentiyi Windows'taki gibi yükleyin; klasörler:
+   ~/.local/share/NovaStream/browser/chrome ve .../browser/firefox
+
+------------------------------------------------------------------------
+3. KULLANIM
+------------------------------------------------------------------------
+- Video sayfasında videonun üzerindeki "İndir" düğmesine basın.
+  NovaStream açıksa indirme uygulamaya aktarılır ve listede görünür.
+- Bir bağlantıya veya videoya sağ tıklayıp "NovaStream ile indir".
+- Uygulamaya aktarılan indirmeler eklenti penceresinde de canlı izlenir:
+  yüzde, hız, kalan süre; ⏸ duraklat / ▶ devam ve ✕ iptal düğmeleri.
+- Bir sayfada birden çok video yakalanırsa asıl video (en uzun / en büyük)
+  en üstte gösterilir; reklam ve kısa parçalar "Diğer N kısa öğe"
+  başlığı altında katlanır.
+- Kanal üyeliği gibi giriş gerektiren YouTube videoları: eklenti,
+  tarayıcıdaki oturum çerezlerini yalnızca bilgisayardaki NovaStream'e
+  verir; uygulama bunları geçici olarak kullanır ve indirme bitince siler.
+- Uygulamada "İndirme Ekle" ile link yapıştırın; videolarda kalite
+  (4K / 1080p / 720p / 480p / yalnızca ses MP3) seçebilirsiniz.
+- Ayarlar: indirme klasörü, bağlantı sayısı, varsayılan kalite,
+  eklentiden gelen indirmeler için onay penceresi, pano izleme,
+  "yt-dlp'yi şimdi güncelle" ve "Log klasörünü aç".
+- yt-dlp haftada bir kendiliğinden güncellenir (YouTube uyumu için).
+
+------------------------------------------------------------------------
+4. SORUN GİDERME
+------------------------------------------------------------------------
+- Loglar: Ayarlar → "Log klasörünü aç"
+  (Windows: %APPDATA%\NovaStream\logs, Linux: ~/.config/novastream/logs)
+- Eklenti köprüsü logu: %TEMP%\novastream_native.log (Linux: /tmp)
+- Bağlantı kurulumu uzun sürüyorsa VPN / Cloudflare WARP / DPI aracı gibi
+  ağ yazılımlarını kapatıp deneyin; her yeni bağlantıyı yavaşlatabilirler.
+- Yarım kalan indirmeler ".nspart" uzantısıyla durur ve "Devam Et" ile
+  kaldığı yerden sürer; tamamlanınca asıl adına taşınır.
+
+İyi kullanımlar!

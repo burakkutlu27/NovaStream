@@ -1,0 +1,4 @@
+PyQt6>=6.6.0
+requests>=2.31.0
+yt-dlp[default]>=2025.1.0
+deno>=2.0.0

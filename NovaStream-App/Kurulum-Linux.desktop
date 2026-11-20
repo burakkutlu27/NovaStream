@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=NovaStream Kurulumu
+GenericName=NovaStream Installer
+Comment=NovaStream İndirme Yöneticisi Kurulum Sihirbazı
+Exec=sh -c 'cd "$(dirname "%k")" && ./run_installer.sh'
+Icon=system-software-install
+Terminal=false
+Categories=System;Utility;
+StartupNotify=true

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NovaStream</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="navbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+      </div>
+      <div>
+        <h1>NovaStream</h1>
+        <p class="tagline">Medya İndirici</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <label class="toggle-control" title="Web sitelerinde video üzerinde çıkan yüzen indirme butonunu aç/kapat">
+        <span class="toggle-label">Yüzen Buton</span>
+        <input type="checkbox" id="toggle-floating-btn" checked>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
+      <div id="media-count" class="badge">0</div>
+    </div>
+  </header>
+
+  <main class="content">
+    <div id="media-list" class="media-list">
+      <!-- Videolar buraya gelecek -->
+    </div>
+
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+      <p class="empty-title">Aktif video akışı bulunamadı</p>
+      <p class="empty-desc">Sayfadaki videoyu oynattığınızda çözünürlüğü tespit edilip burada listelenecektir.</p>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Doğrudan İndirilenler Klasörüne • Paralel Hızlandırma</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

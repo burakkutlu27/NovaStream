@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+NovaStream-App/venv/
+NovaStream-App/runtime/
+*.nspart
+*.nspart.meta
+*.pem
+
+# Kurulum ve derleme ciktilari
+NovaStream-Kurulum-*.exe
+NovaStream_Setup_*.exe
+*.exe
+NovaStream-App/Output/
+dist/
+build/
+*.zip
+*.crx
+*.xpi
+*.tar.gz
+
+# Test ve log dosyalari
+.pytest_cache/
+*.log
+
+# Isletim sistemi ve editor dosyalari
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

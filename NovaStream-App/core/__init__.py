@@ -1,0 +1,3 @@
+"""
+NovaStream Core Engine Package
+"""
