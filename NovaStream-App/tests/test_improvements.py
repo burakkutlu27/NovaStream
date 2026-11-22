@@ -29,10 +29,12 @@ def test_429_rate_limit_backoff_recovers(server, tmp_path, data):
 
 
 def test_queue_batch_operations_and_subtitles(server, tmp_path):
+    import threading
+    baseline_threads = threading.active_count()
     qm = QueueManager()
-    t1 = qm.add_task(url=server + "/range/slow/b1.bin", title="b1.bin", destination_dir=str(tmp_path), download_subtitles=True)
-    t2 = qm.add_task(url=server + "/range/slow/b2.bin", title="b2.bin", destination_dir=str(tmp_path), download_subtitles=True)
-    t3 = qm.add_task(url=server + "/range/slow/b3.bin", title="b3.bin", destination_dir=str(tmp_path), auto_start=False)
+    t1 = qm.add_task(url=server + "/range/crawl/b1.bin", title="b1.bin", destination_dir=str(tmp_path), download_subtitles=True)
+    t2 = qm.add_task(url=server + "/range/crawl/b2.bin", title="b2.bin", destination_dir=str(tmp_path), download_subtitles=True)
+    t3 = qm.add_task(url=server + "/range/crawl/b3.bin", title="b3.bin", destination_dir=str(tmp_path), auto_start=False)
     assert t1.download_subtitles is True and t1.to_dict()["download_subtitles"] is True
     assert wait_for(lambda: t1.downloaded_bytes > 0 or t1.status == "completed", 20)
 
@@ -45,6 +47,9 @@ def test_queue_batch_operations_and_subtitles(server, tmp_path):
     removed = qm.remove_tasks([t1.id, t2.id, t3.id], delete_file=False)
     assert removed == 3
     assert qm.get_task(t1.id) is None and qm.get_task(t2.id) is None and qm.get_task(t3.id) is None
+    # İndirme iş parçacıkları test bitmeden kapansın; aksi halde süreç kapanırken çalışmaya devam edip
+    # yorumlayıcıyı çökertebiliyor (crawl uç noktasıyla indirme birkaç saniye sürüyor)
+    assert wait_for(lambda: threading.active_count() <= baseline_threads, 15)
 
 
 def test_stream_downloader_429_and_subtitle_flags(tmp_path):

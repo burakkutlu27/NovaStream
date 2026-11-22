@@ -34,7 +34,17 @@ def firefox_manifest(chrome_manifest):
     return ordered
 
 
+def utf8_console():
+    """Windows konsolu (cp1252/cp1254) Türkçe karakterleri yazamayıp çökmesin diye çıktıyı UTF-8'e sabitler."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main():
+    utf8_console()
     src_ext, dst_ext = SRC, DST
     if os.path.isdir(dst_ext):
         shutil.rmtree(dst_ext)

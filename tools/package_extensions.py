@@ -267,6 +267,7 @@ def package_all(out_dir, key_path=DEFAULT_KEY_PATH, with_id_name=False, with_crx
 
 
 def main(argv=None):
+    sync_extensions.utf8_console()
     parser = argparse.ArgumentParser(description="NovaStream eklentilerini paketler (.zip, .crx, .xpi).")
     parser.add_argument("--out", default=os.path.join(ROOT, "dist", "extensions"), help="Çıktı klasörü")
     parser.add_argument("--key", default=DEFAULT_KEY_PATH, help="CRX3 RSA-2048 PEM anahtar dosyası")

@@ -47,7 +47,9 @@ class _Handler(BaseHTTPRequestHandler):
             except OSError:
                 return
             if slow:
-                time.sleep(0.03)
+                # "crawl": duraklatma testleri için; 16 bağlantıyla bile indirme ~3 sn sürer,
+                # böylece hızlı CI makinelerinde indirme duraklatılmadan bitmez
+                time.sleep(0.5 if slow == "crawl" else 0.03)
 
     def do_HEAD(self):
         if self.path.startswith(("/range", "/norange")):
@@ -73,7 +75,7 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._range()
         elif self.path.startswith("/range"):
-            self._range(slow="slow" in self.path)
+            self._range(slow="crawl" if "crawl" in self.path else ("slow" in self.path))
         elif self.path.startswith("/norange"):
             self._range(ignore_range=True)
         elif self.path.startswith("/chunked"):
