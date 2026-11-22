@@ -5,7 +5,7 @@ import path from "node:path";
 import vm from "node:vm";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
-const BG_PATH = path.join(ROOT, "NovaStream-v2", "OpenVideoDownloader-Extension", "background.js");
+const BG_PATH = path.join(ROOT, "extension", "chrome", "background.js");
 const code = fs.readFileSync(BG_PATH, "utf8");
 
 function makeChromeMock() {

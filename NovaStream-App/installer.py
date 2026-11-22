@@ -44,9 +44,8 @@ def get_default_install_dir():
 
 
 SOURCE_ROOT = os.path.dirname(APP_DIR)            # NovaStream/ (eklenti klasörlerinin bulunduğu yer)
-CHROME_SRC = os.path.join(SOURCE_ROOT, "NovaStream-v2")
-FIREFOX_SRC = os.path.join(SOURCE_ROOT, "NovaStream-Firefox")
-EXT_DIR_NAME = "OpenVideoDownloader-Extension"
+# extension/ kurulumdaki browser/ klasörüyle aynı düzende: native_host.* + chrome/ + firefox/
+EXTENSION_SRC = os.path.join(SOURCE_ROOT, "extension")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -174,11 +173,11 @@ class InstallWorker(QThread):
             browser_dir = os.path.join(self.target_dir, "browser")
             os.makedirs(browser_dir, exist_ok=True)
             for f in ("native_host.py", "native_host.bat", "native_host.sh"):
-                src = os.path.join(CHROME_SRC, f)
+                src = os.path.join(EXTENSION_SRC, f)
                 if os.path.exists(src):
                     shutil.copy2(src, os.path.join(browser_dir, f))
-            for src_root, name in ((CHROME_SRC, "chrome"), (FIREFOX_SRC, "firefox")):
-                src = os.path.join(src_root, EXT_DIR_NAME)
+            for name in ("chrome", "firefox"):
+                src = os.path.join(EXTENSION_SRC, name)
                 dst = os.path.join(browser_dir, name)
                 if os.path.isdir(src):
                     if os.path.exists(dst):
@@ -656,11 +655,11 @@ class InstallerWizard(QDialog):
                 lines.append("")
             lines.extend([
                 "Tarayıcı izin vermediğinde manuel eklenti yükleme konumları:",
-                f"• Chrome / Edge / Brave / Opera / Vivaldi (Paketlenmemiş öğe yükle KLASÖRÜ):",
+                "• Chrome / Edge / Brave / Opera / Vivaldi (Paketlenmemiş öğe yükle KLASÖRÜ):",
                 f"  {os.path.join(browser_dir, 'chrome')}",
-                f"• Firefox (about:debugging → Geçici Eklenti Yükle DOSYASI):",
+                "• Firefox (about:debugging → Geçici Eklenti Yükle DOSYASI):",
                 f"  {os.path.join(browser_dir, 'firefox', 'manifest.json')}",
-                f"• Paketli eklentiler (.xpi / .zip / .crx):",
+                "• Paketli eklentiler (.xpi / .zip / .crx):",
                 f"  {os.path.join(browser_dir, 'packages')}",
             ])
             self.finish_desc.setPlainText("\n".join(lines))

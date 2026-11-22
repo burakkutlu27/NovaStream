@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QProgressBar, QFrame
 )
-from core.engine import format_bytes
+from core.engine import format_bytes, format_duration
 from ui.chunk_visualizer import ChunkVisualizer
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -49,10 +49,14 @@ class ProgressDialog(QDialog):
         self.eta_lbl = QLabel(f"Kalan: {self.task.eta}")
         self.eta_lbl.setStyleSheet("color: #8b949e;")
 
+        self.elapsed_lbl = QLabel(f"Süre: {format_duration(self.task.elapsed())}")
+        self.elapsed_lbl.setStyleSheet("color: #8b949e;")
+
         info_layout.addWidget(self.status_lbl)
         info_layout.addStretch()
         info_layout.addWidget(self.speed_lbl)
         info_layout.addWidget(self.eta_lbl)
+        info_layout.addWidget(self.elapsed_lbl)
         layout.addLayout(info_layout)
 
         # Ana İlerleme Çubuğu
@@ -164,6 +168,7 @@ class ProgressDialog(QDialog):
             self.pause_resume_btn.setIcon(QIcon(os.path.join(ICON_DIR, "pause.svg" if task.status == "downloading" else "play.svg")))
 
         self.eta_lbl.setText(f"Kalan Süre: {task.eta}")
+        self.elapsed_lbl.setText(f"Süre: {format_duration(task.elapsed())}")
         self.prog_bar.setValue(int(task.percent))
         self.size_lbl.setText(self._get_size_str())
         self.visualizer.set_segments(task.segments_data)

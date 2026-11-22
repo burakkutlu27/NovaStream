@@ -56,7 +56,8 @@ def test_stream_downloader_429_and_subtitle_flags(tmp_path):
         subtitle_langs="tr,en",
     )
     cmd_hls = sd_hls._build_cmd(False)
-    assert cmd_hls[cmd_hls.index("-N") + 1] == "10"
+    assert cmd_hls[cmd_hls.index("-N") + 1] == "4"  # hız sınırlı HLS sunucularında fazla paralellik yalnızca 429 üretir
+    assert cmd_hls[cmd_hls.index("--fragment-retries") + 1] == "20"
     assert "--retry-sleep" in cmd_hls
     assert "--write-subs" in cmd_hls
     assert cmd_hls[cmd_hls.index("--sub-langs") + 1] == "tr,en"
@@ -235,7 +236,7 @@ def test_mainwindow_multiselect_and_select_all(tmp_path):
         t3 = qm.add_task("https://example.com/3.bin", title="3.bin", destination_dir=str(tmp_path), auto_start=False)
         win.refresh_table_data(force=True)
 
-        assert win.table.columnCount() == 9
+        assert win.table.columnCount() == 10
         assert win.table.selectionMode() == QTableWidget.SelectionMode.ExtendedSelection
         assert win.table.rowCount() == 3
 

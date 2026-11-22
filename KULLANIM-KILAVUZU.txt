@@ -1,5 +1,5 @@
 ========================================================================
-                      NovaStream İndirme Yöneticisi 2.5.0
+                      NovaStream İndirme Yöneticisi 2.6.0
                         (Windows ve Linux sürümü)
 ========================================================================
 
@@ -12,7 +12,7 @@ Detaylı tarayıcı eklentisi rehberi için ayrıca BENI-OKU.txt dosyasına bak�
 ------------------------------------------------------------------------
 1. WINDOWS KURULUMU
 ------------------------------------------------------------------------
-1) "NovaStream-Kurulum-v2.5.0.exe" dosyasını çalıştırın ve sihirbazı izleyin.
+1) "NovaStream-Kurulum-v2.6.0.exe" dosyasını çalıştırın ve sihirbazı izleyin.
    - Windows "Bilinmeyen yayımcı" uyarısı verirse: "Ek bilgi" →
      "Yine de çalıştır" (kurulum dosyası imzasız olduğu için normaldir).
    - Kurulumun içinde gömülü Python (ve sürüm paketine göre FFmpeg) vardır;

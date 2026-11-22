@@ -56,6 +56,7 @@ DEFAULT_SETTINGS = {
     "download_subtitles": False,
     "subtitle_langs": "tr,en",
     "last_ytdlp_update": 0,
+    "column_widths": [],                # ana tablo sütun genişlikleri (kullanıcı sürükleyerek ayarlar)
 }
 
 
@@ -116,11 +117,29 @@ class DownloadTask:
         self.downloaded_bytes = 0
         self.error_message = None
         self.created_at = time.strftime("%Y-%m-%d %H:%M:%S")
+        # Yalnızca "downloading" durumunda geçen süre sayılır; duraklatma/kuyruk beklemesi dahil değil
+        self.elapsed_seconds = 0.0
+        self._active_since = None
 
         self.downloader = None
         self.segments_data = []
         self.cookie_text = None   # eklentiden gelen çerezler; yalnızca bellekte, geçmişe yazılmaz
         self.cookie_file = None
+
+    def sync_elapsed(self):
+        """Durum geçişine göre aktif süre sayacını başlatır/durdurur."""
+        now = time.monotonic()
+        if self.status == "downloading":
+            if self._active_since is None:
+                self._active_since = now
+        elif self._active_since is not None:
+            self.elapsed_seconds += now - self._active_since
+            self._active_since = None
+
+    def elapsed(self):
+        self.sync_elapsed()
+        live = time.monotonic() - self._active_since if self._active_since is not None else 0.0
+        return self.elapsed_seconds + live
 
     def to_dict(self):
         return {
@@ -144,6 +163,7 @@ class DownloadTask:
             "total_bytes": self.total_bytes,
             "downloaded_bytes": self.downloaded_bytes,
             "created_at": self.created_at,
+            "elapsed_seconds": round(self.elapsed(), 1),
             "error_message": self.error_message,
             "speed": self.speed,
             "eta": self.eta
@@ -240,6 +260,10 @@ class QueueManager:
                 t.total_bytes = item.get("total_bytes", 0)
                 t.downloaded_bytes = item.get("downloaded_bytes", 0)
                 t.created_at = item.get("created_at", "")
+                try:
+                    t.elapsed_seconds = float(item.get("elapsed_seconds") or 0.0)
+                except (TypeError, ValueError):
+                    t.elapsed_seconds = 0.0
                 t.speed = "Tamamlandı" if t.status == "completed" else ("Hata" if t.status == "error" else "Duraklatıldı")
                 self.tasks[t.id] = t
         except Exception as e:
@@ -267,6 +291,7 @@ class QueueManager:
             return self.tasks.get(task_id)
 
     def _notify(self, task):
+        task.sync_elapsed()
         if self.on_task_updated:
             try:
                 self.on_task_updated(task)
@@ -363,6 +388,7 @@ class QueueManager:
             return False
 
         task.status = "downloading"
+        task.sync_elapsed()
         task.error_message = None
         holder = {}
 

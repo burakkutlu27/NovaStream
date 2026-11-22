@@ -139,6 +139,6 @@ def unregister():
 
 if __name__ == "__main__":
     # Kaynak klasörden (kurulumsuz) çalıştırmak için: python native_messaging.py <native_host klasörü>
-    target = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "NovaStream-v2")
+    target = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "extension")
     for line in register(target):
         print("[OK]", line)

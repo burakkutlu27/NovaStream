@@ -51,7 +51,7 @@ class BrowserSetupDialog(QDialog):
         installed_dir = os.path.join(APP_DIR, "browser")
         if os.path.isdir(installed_dir):
             return installed_dir
-        dev_dir = os.path.join(os.path.dirname(APP_DIR), "NovaStream-v2")
+        dev_dir = os.path.join(os.path.dirname(APP_DIR), "extension")
         return dev_dir if os.path.isdir(dev_dir) else installed_dir
 
     def init_ui(self):
@@ -120,18 +120,10 @@ class BrowserSetupDialog(QDialog):
         layout.addLayout(close_row)
 
     def _chrome_path(self):
-        cand = os.path.join(self.browser_dir, "chrome")
-        if os.path.isdir(cand):
-            return cand
-        return os.path.join(self.browser_dir, "OpenVideoDownloader-Extension")
+        return os.path.join(self.browser_dir, "chrome")
 
     def _firefox_manifest_path(self):
-        cand = os.path.join(self.browser_dir, "firefox", "manifest.json")
-        if os.path.isfile(cand):
-            return cand
-        return os.path.join(
-            os.path.dirname(APP_DIR), "NovaStream-Firefox", "OpenVideoDownloader-Extension", "manifest.json"
-        )
+        return os.path.join(self.browser_dir, "firefox", "manifest.json")
 
 
 class SettingsDialog(QDialog):

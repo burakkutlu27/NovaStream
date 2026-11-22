@@ -7,7 +7,7 @@ import sys
 
 from conftest import ROOT
 
-HOST = os.path.join(ROOT, "NovaStream-v2", "native_host.py")
+HOST = os.path.join(ROOT, "extension", "native_host.py")
 
 
 def test_parca_yazma_ve_baglanti_kopunca_temizlik(tmp_path):

@@ -5,7 +5,7 @@ NovaStream Tarayıcı Eklentisi Paketleyici (.zip, .crx CRX3, .xpi)
 Kullanım:
     python tools/package_extensions.py [--out dist/extensions] [--key path/to/key.pem] [--with-id-name]
 
-- Önce tools/sync_extensions.py ile NovaStream-Firefox kopyasını senkronize eder.
+- Önce tools/sync_extensions.py ile extension/firefox kopyasını senkronize eder.
 - Chrome / Edge / Brave / Opera / Vivaldi için:
     * NovaStream-Chrome-Edge-Brave-v<ver>.zip
     * NovaStream-Chrome-Edge-Brave-v<ver>.crx (geçerli CRX3 protobuf + RSA-2048 imzalı)
@@ -33,8 +33,8 @@ if ROOT not in sys.path:
 
 from tools import sync_extensions  # noqa: E402
 
-CHROME_EXT_DIR = os.path.join(ROOT, "NovaStream-v2", "OpenVideoDownloader-Extension")
-FIREFOX_EXT_DIR = os.path.join(ROOT, "NovaStream-Firefox", "OpenVideoDownloader-Extension")
+CHROME_EXT_DIR = os.path.join(ROOT, "extension", "chrome")
+FIREFOX_EXT_DIR = os.path.join(ROOT, "extension", "firefox")
 DEFAULT_KEY_PATH = os.path.join(ROOT, ".novastream_ext_key.pem")
 GECKO_ID = "novastream@downloader.local"
 
@@ -218,11 +218,11 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
-def package_all(out_dir, key_path=DEFAULT_KEY_PATH, with_id_name=False):
+def package_all(out_dir, key_path=DEFAULT_KEY_PATH, with_id_name=False, with_crx=True):
     sync_extensions.main()
     with open(os.path.join(CHROME_EXT_DIR, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
-    version = manifest.get("version", "2.5.0")
+    version = manifest.get("version", "2.6.0")
 
     os.makedirs(out_dir, exist_ok=True)
 
@@ -237,7 +237,11 @@ def package_all(out_dir, key_path=DEFAULT_KEY_PATH, with_id_name=False):
     with open(chrome_zip_path, "wb") as f:
         f.write(_zip_extension_bytes(CHROME_EXT_DIR, strip_manifest_key=False))
 
-    _, crx_id = build_crx3(CHROME_EXT_DIR, chrome_crx_path, key_path=key_path)
+    # .crx yalnızca özel anahtarla doğru kimliği alır; anahtarın bulunmadığı yerde (CI) atlanır.
+    # .zip'teki manifest "key" alanı zaten sabit eklenti kimliğini verir.
+    crx_id = None
+    if with_crx:
+        _, crx_id = build_crx3(CHROME_EXT_DIR, chrome_crx_path, key_path=key_path)
 
     with open(firefox_xpi_path, "wb") as f:
         f.write(_zip_extension_bytes(FIREFOX_EXT_DIR, strip_manifest_key=False))
@@ -245,16 +249,16 @@ def package_all(out_dir, key_path=DEFAULT_KEY_PATH, with_id_name=False):
     if with_id_name:
         shutil.copy2(firefox_xpi_path, os.path.join(out_dir, f"{GECKO_ID}.xpi"))
 
-    summary = {
-        "version": version,
-        "crx_extension_id": crx_id,
-        "gecko_id": GECKO_ID,
-        "files": {
-            "chrome_zip": {"filename": chrome_zip_name, "sha256": _sha256_file(chrome_zip_path)},
-            "chrome_crx": {"filename": chrome_crx_name, "sha256": _sha256_file(chrome_crx_path)},
-            "firefox_xpi": {"filename": firefox_xpi_name, "sha256": _sha256_file(firefox_xpi_path)},
-        },
-    }
+    files = {"chrome_zip": {"filename": chrome_zip_name, "sha256": _sha256_file(chrome_zip_path)}}
+    if with_crx:
+        files["chrome_crx"] = {"filename": chrome_crx_name, "sha256": _sha256_file(chrome_crx_path)}
+    files["firefox_xpi"] = {"filename": firefox_xpi_name, "sha256": _sha256_file(firefox_xpi_path)}
+
+    summary = {"version": version}
+    if crx_id:
+        summary["crx_extension_id"] = crx_id
+    summary["gecko_id"] = GECKO_ID
+    summary["files"] = files
     manifest_out = os.path.join(out_dir, "packages_manifest.json")
     with open(manifest_out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
@@ -267,10 +271,17 @@ def main(argv=None):
     parser.add_argument("--out", default=os.path.join(ROOT, "dist", "extensions"), help="Çıktı klasörü")
     parser.add_argument("--key", default=DEFAULT_KEY_PATH, help="CRX3 RSA-2048 PEM anahtar dosyası")
     parser.add_argument("--with-id-name", action="store_true", help="Firefox eklentisini Gecko ID adıyla da kopyala")
+    parser.add_argument("--no-crx", action="store_true", help=".crx üretme (özel anahtar gerekmez)")
     args = parser.parse_args(argv)
 
-    summary = package_all(os.path.abspath(args.out), key_path=os.path.abspath(args.key), with_id_name=args.with_id_name)
-    print(f"[OK] Paketler oluşturuldu (v{summary['version']}, CRX ID={summary['crx_extension_id']}): {args.out}")
+    summary = package_all(
+        os.path.abspath(args.out),
+        key_path=os.path.abspath(args.key),
+        with_id_name=args.with_id_name,
+        with_crx=not args.no_crx,
+    )
+    crx_note = f", CRX ID={summary['crx_extension_id']}" if summary.get("crx_extension_id") else ", .crx yok"
+    print(f"[OK] Paketler oluşturuldu (v{summary['version']}{crx_note}): {args.out}")
     for info in summary["files"].values():
         print(f"  - {info['filename']} ({info['sha256'][:12]}...)")
     return 0

@@ -11,6 +11,10 @@ on:
         required: false
         default: ""
 
+# Elle çalıştırmada girilen etiket, yoksa push edilen etiket/branch adı kullanılır
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
 jobs:
   package-extensions:
     runs-on: ubuntu-latest
@@ -19,26 +23,48 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Sürüm tutarlılığı (etiket = manifest = .iss = uygulama)
+        if: startsWith(env.RELEASE_TAG, 'v')
+        shell: bash
+        run: |
+          want="${RELEASE_TAG#v}"
+          chrome=$(python -c "import json;print(json.load(open('extension/chrome/manifest.json',encoding='utf-8'))['version'])")
+          firefox=$(python -c "import json;print(json.load(open('extension/firefox/manifest.json',encoding='utf-8'))['version'])")
+          iss=$(sed -n 's/^#define MyAppVersion "\(.*\)"/\1/p' NovaStream-App/NovaStream_Setup.iss)
+          app=$(sed -n 's/^APP_VERSION = "\(.*\)"/\1/p' NovaStream-App/core/bridge_server.py)
+          echo "etiket=$want chrome=$chrome firefox=$firefox iss=$iss app=$app"
+          for v in "$chrome" "$firefox" "$iss" "$app"; do
+            if [ "$v" != "$want" ]; then
+              echo "::error::Sürüm uyuşmuyor: etiket v$want, dosyalarda $v. Sürümü güncelleyip etiketi yeniden atın."
+              exit 1
+            fi
+          done
       - name: Paketleme araçları
         run: |
           python -m pip install --upgrade pip
           python -m pip install pycryptodomex
-      - name: Eklentileri paketle (.zip, .crx, .xpi)
-        run: python tools/package_extensions.py --out dist/extensions --with-id-name
+      # .crx üretilmez: özel anahtar CI'a girmesin diye. Chrome mağaza dışı .crx kurulumunu zaten engelliyor;
+      # .zip'teki manifest "key" alanı sabit eklenti kimliğini verir.
+      - name: Eklentileri paketle (.zip, .xpi)
+        run: python tools/package_extensions.py --out dist/extensions --with-id-name --no-crx
       - name: Linux kaynak paketi oluştur
         shell: bash
         run: |
-          VER="${GITHUB_REF_NAME}"
+          # Arşiv, arşivlenen ağacın dışında oluşturulur; aksi halde tar "file changed as we read it" ile hata verebilir
+          out="${RUNNER_TEMP}/NovaStream-Linux-${RELEASE_TAG}.tar.gz"
+          tar --exclude='./.git' --exclude='./dist' --exclude='./NovaStream-App/runtime' --exclude='./NovaStream-App/venv' --exclude='__pycache__' --exclude='*.exe' --exclude='*.pem' -czf "$out" .
           mkdir -p dist/linux
-          tar --exclude='.git' --exclude='dist' --exclude='NovaStream-App/runtime' --exclude='NovaStream-App/venv' --exclude='__pycache__' --exclude='*.exe' --exclude='*.pem' -czf "dist/linux/NovaStream-Linux-${VER}.tar.gz" .
+          mv "$out" dist/linux/
       - uses: actions/upload-artifact@v4
         with:
           name: extension-packages
           path: dist/extensions/*
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: linux-bundle
           path: dist/linux/*
+          if-no-files-found: error
 
   build-windows:
     runs-on: windows-latest
@@ -56,32 +82,42 @@ jobs:
       - name: Eklenti paketlerini kurulum içine ekle
         run: |
           python tools/sync_extensions.py
-          python tools/package_extensions.py --out NovaStream-App/browser_packages --with-id-name
+          python tools/package_extensions.py --out NovaStream-App/browser_packages --with-id-name --no-crx
       - name: Inno Setup ile Windows kurulum .exe oluştur
         shell: pwsh
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          # Runner imajında Inno Setup her zaman hazır değil; sürüm klasörü adına bağlı kalmamak için aranır
+          function Find-Iscc {
+            foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+              if (-not $base) { continue }
+              $hit = Get-ChildItem -Path $base -Filter "Inno Setup*" -Directory -ErrorAction SilentlyContinue |
+                ForEach-Object { Join-Path $_.FullName "ISCC.exe" } | Where-Object { Test-Path $_ } | Select-Object -First 1
+              if ($hit) { return $hit }
+            }
+            return $null
           }
-          if (-not (Test-Path $iscc)) {
+          $iscc = Find-Iscc
+          if (-not $iscc) {
             choco install innosetup -y --no-progress
-            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            $iscc = Find-Iscc
           }
-          if (-not (Test-Path $iscc)) { throw "Inno Setup (ISCC.exe) bulunamadi" }
+          if (-not $iscc) { throw "Inno Setup (ISCC.exe) bulunamadi" }
           & $iscc "NovaStream-App\NovaStream_Setup.iss"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force -Path dist\windows | Out-Null
-          $outExe = Get-ChildItem -Path "NovaStream-App\Output" -Filter "*.exe" | Select-Object -First 1
-          Copy-Item $outExe.FullName -Destination "dist\windows\NovaStream-Kurulum-${env:GITHUB_REF_NAME}.exe" -Force
+          $outExe = Get-ChildItem -Path "NovaStream-App\Output" -Filter "*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $outExe) { throw "Inno Setup cikti .exe dosyasi bulunamadi" }
+          Copy-Item $outExe.FullName -Destination "dist\windows\NovaStream-Kurulum-${env:RELEASE_TAG}.exe" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
           path: dist/windows/*.exe
+          if-no-files-found: error
 
   publish-release:
     needs: [package-extensions, build-windows]
-    if: startsWith(github.ref, 'refs/tags/')
+    # Etiket push'unda ya da elle çalıştırmada etiket girildiyse yayınla
+    if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -100,8 +136,10 @@ jobs:
       - name: GitHub Release Yayınla
         uses: softprops/action-gh-release@v2
         with:
-          name: "NovaStream ${{ github.ref_name }}"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "NovaStream ${{ env.RELEASE_TAG }}"
           body_path: RELEASE_NOTES.md
           files: release-assets/*
+          fail_on_unmatched_files: true
           draft: false
           prerelease: false

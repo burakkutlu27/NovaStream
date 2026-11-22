@@ -2,6 +2,23 @@
 
 Bu projedeki tüm önemli değişiklikler bu dosyada belgelenir.
 
+## [v2.6.0] - 2026-11-22
+
+### Masaüstü Uygulaması (`NovaStream-App`)
+- **İndirme süresi (`core/queue_manager.py`, `core/engine.py`, `ui/main_window.py`, `ui/progress_dialog.py`):** Her görev için yalnızca aktif indirme süresi (`elapsed_seconds`) tutulur ve geçmişe kaydedilir; tabloya **Süre** sütunu (10 sütun) ve ilerleme penceresine süre etiketi eklendi.
+- **Ayarlanabilir sütunlar (`ui/main_window.py`):** Sütunlar `Interactive` moda alındı; genişlikler `column_widths` ayarında saklanıp açılışta geri yüklenir.
+- **Sürüm görünürlüğü (`ui/main_window.py`, `ui/tray_icon.py`):** `APP_VERSION` pencere başlığında, durum çubuğunda ve tepsi ipucunda gösterilir.
+- **Statik kontrol (`installer.py`):** pyflakes'in yakaladığı gereksiz f-string önekleri kaldırıldı.
+
+### Paketleme & Otomatik Release
+- **Release iş akışı (`.github/workflows/release.yml`):** Etiket/sürüm tutarlılık kontrolü, `workflow_dispatch` etiket girdisinin kullanımı, Linux arşivinin çalışma ağacı dışında oluşturulması, sürümden bağımsız `ISCC.exe` arama ve eksik dosyada hata verme eklendi.
+- **`.crx` release dışı (`tools/package_extensions.py`):** `--no-crx` seçeneği eklendi; CI özel anahtar olmadan yalnızca `.zip` ve `.xpi` üretir.
+
+### Klasör Düzeni
+- **Eklentiler tek yerde (`extension/`):** `NovaStream-v2/OpenVideoDownloader-Extension` → `extension/chrome/`, `NovaStream-Firefox/OpenVideoDownloader-Extension` → `extension/firefox/` (otomatik üretilir). İki kopya hâlindeki native host tek kopyaya indirildi: `extension/native_host.*`. Düzen, kurulumdaki `browser/` klasörüyle birebir aynıdır.
+
+---
+
 ## [v2.5.0] - 2026-11-20
 
 ### Eklenti & Video Yakalama İyileştirmeleri (`NovaStream-v2` & `NovaStream-Firefox`)

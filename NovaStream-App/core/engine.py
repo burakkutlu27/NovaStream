@@ -68,6 +68,19 @@ def format_eta(seconds):
     return f"{m:02d} dk {s:02d} sn"
 
 
+def format_duration(seconds):
+    """Geçen süre: 45 sn, 3 dk 05 sn, 1 sa 02 dk 09 sn."""
+    if not seconds or seconds < 1:
+        return "-"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h} sa {m:02d} dk {s:02d} sn"
+    if m > 0:
+        return f"{m} dk {s:02d} sn"
+    return f"{s} sn"
+
+
 PART_SUFFIX = ".nspart"
 META_SUFFIX = ".nspart.meta"
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"

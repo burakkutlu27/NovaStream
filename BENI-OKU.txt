@@ -1,5 +1,5 @@
 ================================================================================
-                  NovaStream İndirme Yöneticisi v2.5.0 - BENİ OKU
+                  NovaStream İndirme Yöneticisi v2.6.0 - BENİ OKU
 ================================================================================
 
 Bu rehber, tarayıcı eklentisinin kurulumu, otomatik algılama adımları ve
@@ -49,7 +49,7 @@ Bu durumda eklentiyi tarayıcıya YALNIZCA BİR KEZ aşağıdaki şekilde tanıt
    - Windows: %LOCALAPPDATA%\NovaStream\browser\chrome
      (Örnek tam yol: C:\Users\<KullanıcıAdı>\AppData\Local\NovaStream\browser\chrome)
    - Linux  : ~/.local/share/NovaStream/browser/chrome
-   - Kaynak koddan test ediyorsanız: NovaStream-v2\OpenVideoDownloader-Extension
+   - Kaynak koddan test ediyorsanız: extension\chrome
 
    [DİKKAT - NE SEÇİLMEMELİ?]
    * "manifest.json" dosyasını DEĞİL, içinde manifest.json bulunan "chrome"
@@ -70,7 +70,7 @@ Bu durumda eklentiyi tarayıcıya YALNIZCA BİR KEZ aşağıdaki şekilde tanıt
 3. Açılan dosya seçme penceresinde ŞU DOSYAYI SEÇİN:
    - Windows: %LOCALAPPDATA%\NovaStream\browser\firefox\manifest.json
    - Linux  : ~/.local/share/NovaStream/browser/firefox/manifest.json
-   - Kaynak koddan test ediyorsanız: NovaStream-Firefox\OpenVideoDownloader-Extension\manifest.json
+   - Kaynak koddan test ediyorsanız: extension\firefox\manifest.json
 
    [DİKKAT - NE SEÇİLMEMELİ?]
    * Firefox "Geçici Eklenti Yükle" penceresi KLASÖR değil DOSYA ister.

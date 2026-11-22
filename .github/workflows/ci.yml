@@ -21,11 +21,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r NovaStream-App/requirements.txt pytest pyflakes pycryptodomex
       - name: Statik kontrol (tanımsız isimler, eksik import)
-        run: python -m pyflakes NovaStream-App/core NovaStream-App/ui NovaStream-App/main.py NovaStream-App/installer.py NovaStream-v2/native_host.py tools/package_extensions.py
+        run: python -m pyflakes NovaStream-App/core NovaStream-App/ui NovaStream-App/main.py NovaStream-App/installer.py extension/native_host.py tools/package_extensions.py
       - name: Eklenti kopyaları senkron mu
         run: |
           python tools/sync_extensions.py
-          git diff --exit-code -- NovaStream-Firefox
+          git diff --exit-code -- extension/firefox
       - name: Eklenti paketleme kontrolü (.zip, .crx, .xpi)
         run: python tools/package_extensions.py --out dist/extensions
       - name: Testler
@@ -41,6 +41,6 @@ jobs:
           node-version: "20"
       - name: JavaScript sözdizimi
         run: |
-          for f in NovaStream-v2/OpenVideoDownloader-Extension/*.js NovaStream-v2/OpenVideoDownloader-Extension/popup/*.js NovaStream-Firefox/OpenVideoDownloader-Extension/*.js NovaStream-Firefox/OpenVideoDownloader-Extension/popup/*.js; do node --check "$f"; done
+          for f in extension/chrome/*.js extension/chrome/popup/*.js extension/firefox/*.js extension/firefox/popup/*.js; do node --check "$f"; done
       - name: Eklenti birim testleri
         run: node tools/test_extension.mjs

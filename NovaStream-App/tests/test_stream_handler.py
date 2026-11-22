@@ -57,3 +57,30 @@ def test_iptal_ara_dosyalari_siler_baskasina_dokunmaz(tmp_path):
     s.output_base = "Bunny"
     s.cancel(delete_partial=True)
     assert sorted(os.listdir(tmp_path)) == ["Baska.mp4", "Bunny (1).mp4.part"]
+
+
+def test_akis_olcumu_parca_sayisini_dogru_akisa_yazar():
+    # yt-dlp "Total fragments" satırını bir sonraki akışın "Destination" satırından ÖNCE yazar
+    from core.stream_handler import StreamStats
+
+    now = [0.0]
+    st = StreamStats(clock=lambda: now[0])
+    lines = [
+        "[hlsnative] Total fragments: 300",
+        "[download] Destination: film.f1.mp4",
+        "[download] Got error: HTTP Error 429: Too Many Requests. Retrying fragment 5 (1/10)...",
+    ]
+    for ln in lines:
+        st.feed(ln)
+    st.progress(5_000_000, "avc1", "none", None)
+    now[0] = 10.0
+    st.feed("[hlsnative] Total fragments: 280")
+    st.feed("[download] Destination: film.f2.mp4")
+    st.progress(200_000, "none", None, "tr")
+    now[0] = 40.0
+    video, ses = st.finish()
+
+    assert video["fragments"] == 300 and ses["fragments"] == 280
+    assert video["kind"] == "video" and video["http429"] == 1 and video["seconds"] == 10.0
+    assert ses["kind"] == "ses" and ses["lang"] == "tr" and ses["retries"] == 0 and ses["seconds"] == 30.0
+    assert "ses (tr)" in st.summary()

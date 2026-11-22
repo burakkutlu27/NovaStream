@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NovaStream Video Downloader",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Herhangi bir sekme açmadan arka planda HLS ve MP4 videoları doğrudan İndirilenler klasörüne kaydeden limitsiz medya indirici.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmcWhFzjrz49MLQJL3cD85PXZNbtlZo2OiQS796qh2qI0mx/CQzMW3rSzZLUKxjaA44negAnvTYLD8CSgA6JoBzsXmcya/PzCrhpIbD6yB/TIVlKWIbzz0xjWqhNbZwypgTUy2nVegWdDdzThSzuHXWdVuY4KwJEibp/d+RvD367+5sUOjJ1F5ndEpYtYgqQK0PsNhn6aSghAv9RKCjS7jRqkJ64skrjMDdl4WLrfByFSYnm+hQmRHHm8qjd35BZAuGOeY/BZI7HtFcRTjWg3C0imlwkAzfUPiSNwa2nMT7S4WGqJRrBz81Z+02R1/PYgq5jOSJ2wJQkfaJjeox/ltwIDAQAB",
   "permissions": [

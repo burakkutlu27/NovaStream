@@ -4,7 +4,7 @@
 ; Sonra bu dosyayi Inno Setup Compiler ile derleyin. Kullanicinin bilgisayarinda Python gerekmez.
 
 #define MyAppName "NovaStream"
-#define MyAppVersion "2.5.0"
+#define MyAppVersion "2.6.0"
 #define MyAppPublisher "NovaStream"
 
 [Setup]
@@ -41,10 +41,10 @@ Source: "core\*.py"; DestDir: "{app}\core"; Flags: ignoreversion
 Source: "ui\*.py"; DestDir: "{app}\ui"; Flags: ignoreversion
 Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "runtime\*"; DestDir: "{app}\runtime"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__"
-Source: "..\NovaStream-v2\native_host.py"; DestDir: "{app}\browser"; Flags: ignoreversion
-Source: "..\NovaStream-v2\native_host.bat"; DestDir: "{app}\browser"; Flags: ignoreversion
-Source: "..\NovaStream-v2\OpenVideoDownloader-Extension\*"; DestDir: "{app}\browser\chrome"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\NovaStream-Firefox\OpenVideoDownloader-Extension\*"; DestDir: "{app}\browser\firefox"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\extension\native_host.py"; DestDir: "{app}\browser"; Flags: ignoreversion
+Source: "..\extension\native_host.bat"; DestDir: "{app}\browser"; Flags: ignoreversion
+Source: "..\extension\chrome\*"; DestDir: "{app}\browser\chrome"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\extension\firefox\*"; DestDir: "{app}\browser\firefox"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "browser_packages\*"; DestDir: "{app}\browser\packages"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]

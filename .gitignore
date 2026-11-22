@@ -12,6 +12,9 @@ NovaStream_Setup_*.exe
 *.exe
 NovaStream-App/Output/
 NovaStream-App/browser_packages/
+# Kaynak klasörden tarayıcı kurulumu yapılınca extension/ altında oluşan çıktılar
+extension/packages/
+extension/com.novastream.downloader.*.json
 dist/
 build/
 *.zip

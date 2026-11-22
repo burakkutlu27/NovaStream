@@ -37,6 +37,79 @@ PROGRESS_PREFIX = "NSPROG"
 FILE_PREFIX = "NSFILE:"
 
 
+class StreamStats:
+    """
+    yt-dlp'nin sırayla indirdiği her akış (video, ses 1, ses 2...) için süre, boyut, parça ve
+    yeniden deneme sayılarını toplar. Hangi akışın yavaş olduğunu ve sunucunun 429 ile
+    sınırlayıp sınırlamadığını tahmin yerine logdan görmek için.
+    """
+
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.streams = []
+        self.cur = None
+        self.started = clock()
+        # yt-dlp "Total fragments" satırını bir sonraki akışın "Destination" satırından ÖNCE yazar
+        self._pending_fragments = None
+
+    def _close(self):
+        if self.cur is not None:
+            self.cur["seconds"] = self.clock() - self.cur["t0"]
+            self.streams.append(self.cur)
+            self.cur = None
+
+    def feed(self, line):
+        m = re.search(r"Total fragments:\s*(\d+)", line)
+        if m:
+            self._pending_fragments = int(m.group(1))
+            return
+        if line.startswith("[download] Destination:"):
+            self._close()
+            self.cur = {"t0": self.clock(), "bytes": 0, "fragments": self._pending_fragments,
+                        "retries": 0, "http429": 0, "kind": None, "lang": None}
+            self._pending_fragments = None
+            return
+        cur = self.cur
+        if cur is None:
+            return
+        low = line.lower()
+        if "retrying" in low or "got error" in low:
+            cur["retries"] += 1
+            if "429" in low:
+                cur["http429"] += 1
+
+    def progress(self, downloaded, vcodec, acodec, lang):
+        if self.cur is None:
+            return
+        self.cur["bytes"] = max(self.cur["bytes"], int(downloaded or 0))
+        # HLS ses kanallarında acodec çoğu zaman bilinmez (NA); vcodec=none yeterli işaret
+        if vcodec == "none" or (acodec and acodec != "none" and not (vcodec and vcodec != "none")):
+            self.cur["kind"] = "ses"
+            if lang:
+                self.cur["lang"] = lang
+        elif vcodec:
+            self.cur["kind"] = "video"
+
+    def finish(self):
+        self._close()
+        return self.streams
+
+    def summary(self):
+        total = self.clock() - self.started
+        parts = [f"toplam {total:.0f} sn"]
+        for i, s in enumerate(self.streams, 1):
+            label = s["kind"] or "akış"
+            if s["lang"]:
+                label += f" ({s['lang']})"
+            frag = f", {s['fragments']} parça" if s["fragments"] else ""
+            rate = format_speed(s["bytes"] / s["seconds"]) if s["seconds"] > 0 else "-"
+            parts.append(
+                f"{i}. {label}: {format_bytes(s['bytes'])}{frag}, {s['seconds']:.0f} sn, {rate}, "
+                f"yeniden deneme {s['retries']} (429: {s['http429']})"
+            )
+        return " | ".join(parts)
+
+
 def find_binary(name):
     """Sistem PATH, uygulamanın Python/runtime klasörü veya bilinen konumlardan çalıştırılabilir dosyayı bulur."""
     bin_path = shutil.which(name)
@@ -273,11 +346,14 @@ class StreamDownloader:
             "--progress",  # --print sessiz moda geçirir; --no-quiet + --progress ile tüm olaylar gelir
             "--no-overwrites",
             "--continue",
-            "-N", "8" if self.is_youtube else "10",
+            # Ölçüm (playmix/Close, 2026-11-22): sunucu ~5 istek/sn ile sınırlıyor; N=10 iken 4722 parçada
+            # 2982 adet 429 alındı. Sınır ortak olduğundan fazla paralellik hız kazandırmaz, yalnızca 429 üretir.
+            "-N", "8" if self.is_youtube else "4",
             "--buffer-size", "64K",
             "--no-resize-buffer",
             "--retries", "10",
-            "--fragment-retries", "10",
+            # Uzun HLS indirmelerinde tek bir parçanın art arda 429 alıp tüm indirmeyi düşürmemesi için
+            "--fragment-retries", "20",
             "--retry-sleep", "http:exp=1:20",
             "--retry-sleep", "fragment:exp=1:20",
             "-P", f"home:{self.destination_dir}",
@@ -343,6 +419,7 @@ class StreamDownloader:
 
         error_lines, tail = [], []
         final_path = None
+        stats = self.stats = StreamStats()
         num_streams = 1
         stream_idx = -1
         stream_bytes_done = 0
@@ -355,6 +432,7 @@ class StreamDownloader:
             if not line:
                 continue
             tail = (tail + [line])[-6:]
+            stats.feed(line)
             if line.startswith(FILE_PREFIX):
                 final_path = line[len(FILE_PREFIX):].strip()
                 continue
@@ -380,6 +458,7 @@ class StreamDownloader:
                 vcodec = vals[5]
                 acodec = vals[6]
                 lang_code = vals[7]
+                stats.progress(dl, vcodec, acodec, lang_code)
                 is_audio_only = (vcodec == "none" and acodec not in (None, "none"))
                 if dl < last_dl:          # yeni bir parça (Destination satırı görülmediyse)
                     stream_bytes_done += last_dl
@@ -421,6 +500,10 @@ class StreamDownloader:
             elif line.startswith("[youtube]") or line.startswith("[info]") or "Downloading webpage" in line:
                 self._emit(percent=max_pct, speed_formatted="Akış çözümleniyor...", eta_formatted="", speed_bps=0.0)
         self.process.wait()
+        stats.finish()
+        if stats.streams:
+            host = urllib.parse.urlparse(self.url).netloc or "?"
+            logging.info(f"Akış indirme ölçümü [{host}] (çıkış kodu {self.process.returncode}): {stats.summary()}")
         return self.process.returncode, (error_lines or tail), final_path
 
     def _run(self):

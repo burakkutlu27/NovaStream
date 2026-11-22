@@ -5,8 +5,8 @@ setlocal
 set "H=%~dp0"
 for %%P in ("%H%NovaStream-App\runtime\python.exe" "%H%NovaStream-App\venv\Scripts\python.exe") do (
     if exist "%%~P" (
-        "%%~P" "%H%NovaStream-App\core\native_messaging.py" "%H%NovaStream-v2"
+        "%%~P" "%H%NovaStream-App\core\native_messaging.py" "%H%extension"
         exit /b
     )
 )
-python "%H%NovaStream-App\core\native_messaging.py" "%H%NovaStream-v2"
+python "%H%NovaStream-App\core\native_messaging.py" "%H%extension"

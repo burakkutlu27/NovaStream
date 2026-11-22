@@ -15,8 +15,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QMenu, QApplication
 )
 
-from core.bridge_server import normalize_cookie_text
-from core.engine import format_bytes, format_speed
+from core.bridge_server import APP_VERSION, normalize_cookie_text
+from core.engine import format_bytes, format_duration, format_speed
 from core.updater import maybe_auto_update, update_components
 from ui.download_dialog import DownloadDialog
 from ui.progress_dialog import ProgressDialog
@@ -26,9 +26,20 @@ from ui.tray_icon import NovaTrayIcon
 
 ICONS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "icons")
 
+# ☐, Dosya Adı, Boyut, İlerleme, Hız, Kalan Süre, Süre, Durum, Kategori, Tarih
+# Toplam, 1280 px pencerede (kenar çubuğu hariç) yatay kaydırma çıkmayacak şekilde seçildi;
+# son sütun (Tarih) kalan alanı doldurur.
+COLUMN_DEFAULT_WIDTHS = [32, 260, 80, 120, 90, 95, 90, 95, 80, 140]
+
+
 def get_icon(name):
     path = os.path.join(ICONS_DIR, name)
     return QIcon(path) if os.path.exists(path) else QIcon()
+
+
+def _icon_url(name):
+    # Qt stil sayfası url() içinde ters eğik çizgiyi kabul etmez
+    return os.path.abspath(os.path.join(ICONS_DIR, name)).replace("\\", "/")
 
 
 class MainWindow(QMainWindow):
@@ -42,7 +53,7 @@ class MainWindow(QMainWindow):
         self.queue_manager = queue_manager
         self.bridge_server = bridge_server
 
-        self.setWindowTitle("NovaStream - İndirme Yöneticisi")
+        self.setWindowTitle(f"NovaStream v{APP_VERSION} - İndirme Yöneticisi")
         self.resize(1060, 620)
         self.setMinimumSize(840, 480)
 
@@ -184,10 +195,17 @@ class MainWindow(QMainWindow):
 
         # Sağ Alan (Tablo)
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(len(COLUMN_DEFAULT_WIDTHS))
         self.table.setHorizontalHeaderLabels([
-            "☐", "Dosya Adı", "Boyut", "İlerleme", "Hız", "Kalan Süre", "Durum", "Kategori", "Tarih"
+            "", "Dosya Adı", "Boyut", "İlerleme", "Hız", "Kalan Süre", "Süre", "Durum", "Kategori", "Tarih"
         ])
+        # Satır kutucukları ve başlıktaki "tümünü seç" kutusu aynı SVG'lerden çizilir; Qt'nin
+        # varsayılan işareti koyu temada kutusuz bir tik olarak görünüyordu.
+        self.table.setStyleSheet(
+            "QTableView::indicator { width: 16px; height: 16px; }"
+            f"QTableView::indicator:unchecked {{ image: url({_icon_url('checkbox-off.svg')}); }}"
+            f"QTableView::indicator:checked {{ image: url({_icon_url('checkbox-on.svg')}); }}"
+        )
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
@@ -201,19 +219,28 @@ class MainWindow(QMainWindow):
         self.table.itemChanged.connect(self.on_table_item_changed)
         self.table.itemSelectionChanged.connect(self.update_selection_ui)
 
+        # Sütunlar kenarından sürüklenerek genişletilebilir; son sütun kalan alanı doldurur.
+        # ResizeToContents/Stretch kullanılmıyor çünkü bu modlarda kullanıcı genişliği değiştiremez.
         header = self.table.horizontalHeader()
+        header.setMinimumSectionSize(32)
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(0, 32)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Dosya adı
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(3, 130)  # İlerleme
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)
+        widths = self.queue_manager.settings.get("column_widths") or []
+        if len(widths) != len(COLUMN_DEFAULT_WIDTHS):
+            widths = COLUMN_DEFAULT_WIDTHS  # sütun sayısı değiştiyse eski kayıt geçersiz
+        for col, w in enumerate(widths):
+            if col == 0:
+                w = COLUMN_DEFAULT_WIDTHS[0]
+            self.table.setColumnWidth(col, max(32, int(w)))
         header.sectionClicked.connect(self.on_header_clicked)
+
+        # Genişlik değişikliklerini sürükleme bitince kaydet (her piksel için diske yazmamak için)
+        self._col_save_timer = QTimer(self)
+        self._col_save_timer.setSingleShot(True)
+        self._col_save_timer.setInterval(600)
+        self._col_save_timer.timeout.connect(self._save_column_widths)
+        header.sectionResized.connect(lambda *_: self._col_save_timer.start())
 
         content_layout.addWidget(self.table)
         main_layout.addWidget(content_widget)
@@ -224,10 +251,15 @@ class MainWindow(QMainWindow):
         self.status_lbl_selected = QLabel("")
         self.status_lbl_selected.setStyleSheet("color: #60a5fa; font-weight: 600; padding: 0 10px;")
         self.status_lbl_bridge = QLabel("")
+        # Kurulu sürümün doğru olup olmadığı tek bakışta görülebilsin
+        self.status_lbl_version = QLabel(f"v{APP_VERSION}")
+        self.status_lbl_version.setStyleSheet("color: #8b949e; padding: 0 8px;")
+        self.status_lbl_version.setToolTip(f"NovaStream sürümü {APP_VERSION}")
 
         self.status_bar.addWidget(self.status_lbl_speed)
         self.status_bar.addWidget(self.status_lbl_selected)
         self.status_bar.addPermanentWidget(self.status_lbl_bridge)
+        self.status_bar.addPermanentWidget(self.status_lbl_version)
 
     def _update_bridge_status(self):
         if self.bridge_server.running:
@@ -312,6 +344,8 @@ class MainWindow(QMainWindow):
                 chk_item = self.table.item(row, 0)
                 if not chk_item:
                     chk_item = QTableWidgetItem("")
+                    # Durum açıkça atanmazsa Qt kutucuğu hiç çizmez (checkState() yine de Unchecked döner)
+                    chk_item.setCheckState(Qt.CheckState.Unchecked)
                     self.table.setItem(row, 0, chk_item)
                 chk_item.setFlags(
                     Qt.ItemFlag.ItemIsUserCheckable
@@ -350,7 +384,10 @@ class MainWindow(QMainWindow):
                 # 5: Kalan Süre
                 self._set_cell(row, 5, t.eta)
 
-                # 6: Durum
+                # 6: Süre (yalnızca aktif indirme süresi, duraklatmalar hariç)
+                self._set_cell(row, 6, format_duration(t.elapsed()))
+
+                # 7: Durum
                 status_tr = {
                     "downloading": "İndiriliyor",
                     "completed": "Tamamlandı",
@@ -358,7 +395,7 @@ class MainWindow(QMainWindow):
                     "queued": "Kuyrukta",
                     "error": "Hata"
                 }.get(t.status, t.status.capitalize())
-                status_item = self._set_cell(row, 6, status_tr)
+                status_item = self._set_cell(row, 7, status_tr)
                 if status_item:
                     if t.status == "error":
                         status_item.setForeground(QColor("#f87171"))
@@ -368,11 +405,11 @@ class MainWindow(QMainWindow):
                         status_item.setForeground(QColor("#e4e6eb"))
                         status_item.setToolTip("")
 
-                # 7: Kategori
-                self._set_cell(row, 7, t.category)
+                # 8: Kategori
+                self._set_cell(row, 8, t.category)
 
-                # 8: Tarih
-                self._set_cell(row, 8, t.created_at)
+                # 9: Tarih
+                self._set_cell(row, 9, t.created_at)
 
                 # İlerleme penceresi açıksa güncelle
                 if t.id in self.progress_dialogs:
@@ -395,6 +432,12 @@ class MainWindow(QMainWindow):
         else:
             item.setText(text)
         return item
+
+    def _save_column_widths(self):
+        widths = [self.table.columnWidth(c) for c in range(self.table.columnCount())]
+        if widths != self.queue_manager.settings.get("column_widths"):
+            self.queue_manager.settings["column_widths"] = widths
+            self.queue_manager.save_settings()
 
     def _visible_task_ids(self):
         ids = []
@@ -486,9 +529,14 @@ class MainWindow(QMainWindow):
     def update_selection_ui(self):
         visible_ids = self._visible_task_ids()
         all_checked = bool(visible_ids) and all(tid in self.checked_task_ids for tid in visible_ids)
+        any_checked = any(tid in self.checked_task_ids for tid in visible_ids)
         hdr = self.table.horizontalHeaderItem(0)
         if hdr:
-            hdr.setText("☑" if all_checked else "☐")
+            state = "on" if all_checked else ("partial" if any_checked else "off")
+            if getattr(self, "_hdr_check_state", None) != state:  # her yenilemede ikon yüklememek için
+                self._hdr_check_state = state
+                hdr.setIcon(get_icon(f"checkbox-{state}.svg"))
+                hdr.setToolTip("Seçimi kaldır" if all_checked else "Tümünü seç")
         self.btn_select_all.setText("Seçimi Kaldır" if all_checked else "Tümünü Seç")
 
         n = len(self.get_selected_task_ids())

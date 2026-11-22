@@ -2,8 +2,9 @@
 """
 Tek kaynaktan iki tarayıcı paketi üretir.
 
-Kaynak: NovaStream-v2/ (Chrome/Edge/Brave eklentisi + native host)
-Üretilen: NovaStream-Firefox/ (aynı JS/HTML/CSS + Firefox manifest'i + aynı native host)
+Kaynak: extension/chrome/ (Chrome/Edge/Brave/Opera/Vivaldi eklentisi)
+Üretilen: extension/firefox/ (aynı JS/HTML/CSS + Firefox manifest'i)
+Native host (extension/native_host.*) iki tarayıcı için ortaktır, kopyalanmaz.
 
 Eklentide bir şeyi değiştirdikten sonra çalıştırın:  python tools/sync_extensions.py
 """
@@ -13,9 +14,8 @@ import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "NovaStream-v2")
-DST = os.path.join(ROOT, "NovaStream-Firefox")
-EXT = "OpenVideoDownloader-Extension"
+SRC = os.path.join(ROOT, "extension", "chrome")
+DST = os.path.join(ROOT, "extension", "firefox")
 GECKO_ID = "novastream@downloader.local"
 
 
@@ -35,7 +35,7 @@ def firefox_manifest(chrome_manifest):
 
 
 def main():
-    src_ext, dst_ext = os.path.join(SRC, EXT), os.path.join(DST, EXT)
+    src_ext, dst_ext = SRC, DST
     if os.path.isdir(dst_ext):
         shutil.rmtree(dst_ext)
     shutil.copytree(src_ext, dst_ext, ignore=shutil.ignore_patterns("manifest.json"))
@@ -44,8 +44,6 @@ def main():
     with open(os.path.join(dst_ext, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(firefox_manifest(chrome), f, ensure_ascii=False, indent=2)
         f.write("\n")
-    for name in ("native_host.py", "native_host.bat", "native_host.sh"):
-        shutil.copy2(os.path.join(SRC, name), os.path.join(DST, name))
     print(f"Firefox paketi güncellendi: {DST}")
     return 0
 

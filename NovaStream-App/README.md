@@ -23,7 +23,7 @@ Linux ve Windows için çok bağlantılı indirme yöneticisi; YouTube / HLS / D
 
 - **Gömülü Python paketi (Windows):** `powershell -ExecutionPolicy Bypass -File tools\build_windows_bundle.ps1` → `NovaStream-App\runtime`
 - **Inno Setup:** `NovaStream_Setup.iss` (önce gömülü paketi oluşturun)
-- **Eklenti tek kaynaktan:** `NovaStream-v2/` düzenlenir, `python tools/sync_extensions.py` Firefox kopyasını üretir.
+- **Eklenti tek kaynaktan:** `extension/chrome/` düzenlenir, `python tools/sync_extensions.py` `extension/firefox/` kopyasını üretir.
 - **Kurmadan tarayıcı köprüsü:** `setup_native_host.sh` / `setup_native_host_windows.bat`
 - **Testler:** `python -m pytest NovaStream-App/tests` (ağ gerekmez; yerel test sunucusu kullanır)
 - **CI:** `.github/workflows/ci.yml` — Windows ve Linux'ta pyflakes + testler + eklenti senkron kontrolü

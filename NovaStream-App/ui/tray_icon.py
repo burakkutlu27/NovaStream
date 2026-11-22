@@ -5,6 +5,7 @@ NovaStream Sistem Tepsisi (Tray Icon) ve Masaüstü Bildirimleri
 import os
 from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
+from core.bridge_server import APP_VERSION
 
 
 class NovaTrayIcon(QSystemTrayIcon):
@@ -14,7 +15,7 @@ class NovaTrayIcon(QSystemTrayIcon):
         super().__init__(icon, parent)
 
         self.main_window = main_window
-        self.setToolTip("NovaStream İndirme Yöneticisi")
+        self.setToolTip(f"NovaStream İndirme Yöneticisi v{APP_VERSION}")
         self.init_menu()
 
         self.activated.connect(self.on_activated)

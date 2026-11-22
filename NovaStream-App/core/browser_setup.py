@@ -393,7 +393,7 @@ def auto_install_extensions(browser_dir, browsers=None):
                 entry["detail"] = f"about:debugging üzerinden {firefox_manifest} dosyasını yükleyin."
         else:
             crx_id = crx_info.get("crx_extension_id")
-            crx_version = crx_info.get("version") or "2.5.0"
+            crx_version = crx_info.get("version") or "2.6.0"
             if not IS_WINDOWS and chrome_crx and crx_id and b.get("ext_drop_dirs"):
                 placed = []
                 for drop_dir in b["ext_drop_dirs"]:
@@ -469,7 +469,7 @@ def reveal_path_in_file_manager(path):
 
 if __name__ == "__main__":
     target_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        os.path.dirname(APP_DIR), "NovaStream-v2"
+        os.path.dirname(APP_DIR), "extension"
     )
     res = auto_install_extensions(target_dir)
     print(json.dumps(res, ensure_ascii=False, indent=2))
