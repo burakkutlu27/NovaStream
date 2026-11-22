@@ -1,13 +1,13 @@
 """
-NovaStream Ana Kullanıcı Arayüzü (PyQt6 MainWindow)
-IDM tarzı modern koyu dashboard, kategori kenar çubuğu, araç çubuğu ve indirme tablosu.
+NovaStream ana penceresi: kategori kenar çubuğu, araç çubuğu ve indirme tablosu.
+Renkler ve ikonlar ui/theme.py'den gelir; bu dosyada renk değeri yazılmaz.
 """
 
 import os
 import subprocess
 import sys
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QIcon, QAction, QColor, QKeySequence, QShortcut
+from PyQt6.QtGui import QIcon, QAction, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QTableWidget, QTableWidgetItem, QHeaderView, QListWidget,
@@ -18,28 +18,52 @@ from PyQt6.QtWidgets import (
 from core.bridge_server import APP_VERSION, normalize_cookie_text
 from core.engine import format_bytes, format_duration, format_speed
 from core.updater import maybe_auto_update, update_components
+from ui import theme
+from ui.display import CATEGORY_LABELS, STATUS_LABELS, eta_text, format_added, split_stage_speed
 from ui.download_dialog import DownloadDialog
 from ui.progress_dialog import ProgressDialog
 from ui.settings_dialog import SettingsDialog
 from ui.tray_icon import NovaTrayIcon
 
 
-ICONS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "icons")
-
-# ☐, Dosya Adı, Boyut, İlerleme, Hız, Kalan Süre, Süre, Durum, Kategori, Tarih
-# Toplam, 1280 px pencerede (kenar çubuğu hariç) yatay kaydırma çıkmayacak şekilde seçildi;
-# son sütun (Tarih) kalan alanı doldurur.
-COLUMN_DEFAULT_WIDTHS = [32, 260, 80, 120, 90, 95, 90, 95, 80, 140]
-
-
-def get_icon(name):
-    path = os.path.join(ICONS_DIR, name)
-    return QIcon(path) if os.path.exists(path) else QIcon()
+# ☐, Dosya adı, Boyut, İlerleme, Hız, Kalan, Süre, Durum, Kategori, Eklenme
+# Varsayılan pencere (1320 px) içinde yatay kaydırma çıkmayacak, en uzun tipik değerler
+# ("1.6 GB / 2.5 GB", "312.4 KB/s", "02 dk 14 sn") kesilmeyecek şekilde seçildi;
+# son sütun (Eklenme) kalan alanı doldurur.
+COLUMN_DEFAULT_WIDTHS = [36, 230, 120, 115, 90, 95, 95, 150, 80, 100]
+NUMERIC_COLUMNS = (2, 4, 5, 6)
 
 
-def _icon_url(name):
-    # Qt stil sayfası url() içinde ters eğik çizgiyi kabul etmez
-    return os.path.abspath(os.path.join(ICONS_DIR, name)).replace("\\", "/")
+def get_icon(name, role="text2"):
+    return theme.icon(name, role)
+
+
+class ProgressCell(QWidget):
+    """Tablodaki ilerleme hücresi: ince çubuk + yüzde. Çubuğun rengi indirme durumuna göre değişir."""
+
+    def __init__(self):
+        super().__init__()
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 0, 10, 0)
+        lay.setSpacing(8)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 100)
+        self.bar.setTextVisible(False)
+        self.label = QLabel()
+        self.label.setProperty("role", "muted")
+        self.label.setFixedWidth(40)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(self.bar, 1)
+        lay.addWidget(self.label)
+        self._state = None
+
+    def set_progress(self, status, percent):
+        self.bar.setValue(int(percent))
+        self.label.setText("✓" if status == "completed" else f"{int(percent)} %")
+        if status != self._state:
+            self._state = status
+            self.bar.setProperty("state", status)
+            theme.repolish(self.bar)
 
 
 class MainWindow(QMainWindow):
@@ -54,8 +78,8 @@ class MainWindow(QMainWindow):
         self.bridge_server = bridge_server
 
         self.setWindowTitle(f"NovaStream v{APP_VERSION} - İndirme Yöneticisi")
-        self.resize(1060, 620)
-        self.setMinimumSize(840, 480)
+        self.resize(1320, 740)
+        self.setMinimumSize(860, 480)
 
         icon_path = os.path.join(os.path.dirname(__file__), "..", "assets", "icon48.png")
         if os.path.exists(icon_path):
@@ -86,6 +110,8 @@ class MainWindow(QMainWindow):
         self.bridge_server.on_show_request = self.show_signal.emit
         self.notify_signal.connect(lambda t, m: self.tray.notify(t, m))
         self._update_bridge_status()
+        # Windows açık/koyu tema değişince ikonlar yeni renkle yeniden çizilir
+        theme.notifier().changed.connect(self._on_theme_changed)
 
         # Haftalık yt-dlp/Deno güncellemesi (arka planda)
         QTimer.singleShot(5000, lambda: maybe_auto_update(self.queue_manager))
@@ -101,52 +127,30 @@ class MainWindow(QMainWindow):
         toolbar = QWidget()
         toolbar.setObjectName("ToolbarWidget")
         tb_layout = QHBoxLayout(toolbar)
-        tb_layout.setContentsMargins(10, 6, 10, 6)
-        tb_layout.setSpacing(6)
+        tb_layout.setContentsMargins(12, 8, 12, 8)
+        tb_layout.setSpacing(4)
 
-        self.btn_add = QPushButton("İndirme Ekle")
-        self.btn_add.setIcon(get_icon("plus.svg"))
-        self.btn_add.setProperty("class", "tool-btn-primary")
-        self.btn_add.clicked.connect(self.open_add_download_dialog)
-        tb_layout.addWidget(self.btn_add)
+        # (buton, ikon dosyası, ikon rengi) — tema değişince ikonlar bu listeden yeniden çizilir
+        self._icon_buttons = []
 
-        self.btn_resume = QPushButton("Devam Et")
-        self.btn_resume.setIcon(get_icon("play.svg"))
-        self.btn_resume.setProperty("class", "tool-btn")
-        self.btn_resume.clicked.connect(self.action_resume_selected)
-        tb_layout.addWidget(self.btn_resume)
+        def tool_button(text, icon_name, cls, slot, role="text2"):
+            btn = QPushButton(text)
+            btn.setIcon(get_icon(icon_name, role))
+            btn.setProperty("class", cls)
+            btn.clicked.connect(slot)
+            self._icon_buttons.append((btn, icon_name, role))
+            tb_layout.addWidget(btn)
+            return btn
 
-        self.btn_pause = QPushButton("Duraklat")
-        self.btn_pause.setIcon(get_icon("pause.svg"))
-        self.btn_pause.setProperty("class", "tool-btn")
-        self.btn_pause.clicked.connect(self.action_pause_selected)
-        tb_layout.addWidget(self.btn_pause)
-
-        self.btn_delete = QPushButton("Sil")
-        self.btn_delete.setIcon(get_icon("trash.svg"))
-        self.btn_delete.setProperty("class", "tool-btn")
-        self.btn_delete.clicked.connect(self.action_delete_selected)
-        tb_layout.addWidget(self.btn_delete)
-
-        self.btn_select_all = QPushButton("Tümünü Seç")
-        self.btn_select_all.setIcon(get_icon("check.svg"))
-        self.btn_select_all.setProperty("class", "tool-btn")
-        self.btn_select_all.clicked.connect(self.toggle_select_all)
-        tb_layout.addWidget(self.btn_select_all)
-
+        self.btn_add = tool_button("İndirme ekle", "plus.svg", "tool-btn-primary", self.open_add_download_dialog, "on_accent")
+        tb_layout.addSpacing(8)
+        self.btn_resume = tool_button("Devam et", "play.svg", "tool-btn", self.action_resume_selected)
+        self.btn_pause = tool_button("Duraklat", "pause.svg", "tool-btn", self.action_pause_selected)
+        self.btn_delete = tool_button("Sil", "trash.svg", "tool-btn", self.action_delete_selected)
+        self.btn_select_all = tool_button("Tümünü seç", "check.svg", "tool-btn", self.toggle_select_all)
         tb_layout.addStretch()
-
-        self.btn_open_folder = QPushButton("İndirilenler")
-        self.btn_open_folder.setIcon(get_icon("folder.svg"))
-        self.btn_open_folder.setProperty("class", "tool-btn")
-        self.btn_open_folder.clicked.connect(self.open_downloads_dir)
-        tb_layout.addWidget(self.btn_open_folder)
-
-        self.btn_settings = QPushButton("Ayarlar")
-        self.btn_settings.setIcon(get_icon("settings.svg"))
-        self.btn_settings.setProperty("class", "tool-btn")
-        self.btn_settings.clicked.connect(self.open_settings_dialog)
-        tb_layout.addWidget(self.btn_settings)
+        self.btn_open_folder = tool_button("İndirilenler", "folder.svg", "tool-btn", self.open_downloads_dir)
+        self.btn_settings = tool_button("Ayarlar", "settings.svg", "tool-btn", self.open_settings_dialog)
 
         main_layout.addWidget(toolbar)
 
@@ -161,10 +165,10 @@ class MainWindow(QMainWindow):
         sidebar.setObjectName("SidebarWidget")
         sidebar.setFixedWidth(180)
         sb_layout = QVBoxLayout(sidebar)
-        sb_layout.setContentsMargins(0, 6, 0, 6)
+        sb_layout.setContentsMargins(0, 4, 0, 8)
         sb_layout.setSpacing(2)
 
-        lbl_cats = QLabel("İNDİRMELER")
+        lbl_cats = QLabel("İndirmeler")
         lbl_cats.setObjectName("SidebarTitle")
         sb_layout.addWidget(lbl_cats)
 
@@ -183,10 +187,12 @@ class MainWindow(QMainWindow):
             ("Programlar", "Programs", "box.svg"),
             ("Diğer", "Others", "file-text.svg")
         ]
+        self._category_icons = []
         for label, key, icon_name in categories:
             item = QListWidgetItem(get_icon(icon_name), label)
             item.setData(Qt.ItemDataRole.UserRole, key)
             self.cat_list.addItem(item)
+            self._category_icons.append((item, icon_name))
 
         self.cat_list.setCurrentRow(0)
         self.cat_list.itemClicked.connect(self.on_category_changed)
@@ -197,22 +203,22 @@ class MainWindow(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(len(COLUMN_DEFAULT_WIDTHS))
         self.table.setHorizontalHeaderLabels([
-            "", "Dosya Adı", "Boyut", "İlerleme", "Hız", "Kalan Süre", "Süre", "Durum", "Kategori", "Tarih"
+            "", "Dosya adı", "Boyut", "İlerleme", "Hız", "Kalan", "Süre", "Durum", "Kategori", "Eklenme"
         ])
-        # Satır kutucukları ve başlıktaki "tümünü seç" kutusu aynı SVG'lerden çizilir; Qt'nin
-        # varsayılan işareti koyu temada kutusuz bir tik olarak görünüyordu.
-        self.table.setStyleSheet(
-            "QTableView::indicator { width: 16px; height: 16px; }"
-            f"QTableView::indicator:unchecked {{ image: url({_icon_url('checkbox-off.svg')}); }}"
-            f"QTableView::indicator:checked {{ image: url({_icon_url('checkbox-on.svg')}); }}"
-        )
-        self.table.setAlternatingRowColors(True)
+        # Satır ve başlık kutucukları tema stil sayfasındaki aynı SVG'lerden çizilir
+        self.table.setAlternatingRowColors(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
+        self.table.setWordWrap(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(28)  # Yüksek bilgi yoğunluğu
+        self.table.verticalHeader().setDefaultSectionSize(40)
+        # Sayılar sağa hizalı ki boyut ve süreler alt alta okunabilsin
+        for col in range(1, len(COLUMN_DEFAULT_WIDTHS)):
+            item = self.table.horizontalHeaderItem(col)
+            if item:
+                item.setTextAlignment(self._align(col))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
         self.table.doubleClicked.connect(self.on_row_double_clicked)
@@ -226,7 +232,7 @@ class MainWindow(QMainWindow):
         header.setStretchLastSection(True)
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        widths = self.queue_manager.settings.get("column_widths") or []
+        widths = self.queue_manager.settings.get("table_columns") or []
         if len(widths) != len(COLUMN_DEFAULT_WIDTHS):
             widths = COLUMN_DEFAULT_WIDTHS  # sütun sayısı değiştiyse eski kayıt geçersiz
         for col, w in enumerate(widths):
@@ -247,13 +253,11 @@ class MainWindow(QMainWindow):
 
         # 3. Alt Durum Çubuğu (Status Bar)
         self.status_bar = self.statusBar()
-        self.status_lbl_speed = QLabel("Toplam Hız: 0.0 B/s")
+        self.status_lbl_speed = QLabel("Etkin indirme yok")
         self.status_lbl_selected = QLabel("")
-        self.status_lbl_selected.setStyleSheet("color: #60a5fa; font-weight: 600; padding: 0 10px;")
         self.status_lbl_bridge = QLabel("")
         # Kurulu sürümün doğru olup olmadığı tek bakışta görülebilsin
         self.status_lbl_version = QLabel(f"v{APP_VERSION}")
-        self.status_lbl_version.setStyleSheet("color: #8b949e; padding: 0 8px;")
         self.status_lbl_version.setToolTip(f"NovaStream sürümü {APP_VERSION}")
 
         self.status_bar.addWidget(self.status_lbl_speed)
@@ -263,11 +267,27 @@ class MainWindow(QMainWindow):
 
     def _update_bridge_status(self):
         if self.bridge_server.running:
-            self.status_lbl_bridge.setText(f"Tarayıcı Köprüsü Aktif (Port {self.bridge_server.port})")
-            self.status_lbl_bridge.setStyleSheet("color: #10b981; font-weight: 600;")
+            self.status_lbl_bridge.setText("Tarayıcı köprüsü açık")
+            self.status_lbl_bridge.setToolTip(f"Eklentiden gelen istekler 127.0.0.1:{self.bridge_server.port} üzerinden alınıyor")
+            self.status_lbl_bridge.setProperty("role", "")
         else:
-            self.status_lbl_bridge.setText(f"Tarayıcı Köprüsü Kapalı: {self.bridge_server.error or 'başlatılamadı'}")
-            self.status_lbl_bridge.setStyleSheet("color: #f87171; font-weight: 600;")
+            self.status_lbl_bridge.setText(f"Tarayıcı köprüsü kapalı: {self.bridge_server.error or 'başlatılamadı'}")
+            self.status_lbl_bridge.setToolTip("")
+            self.status_lbl_bridge.setProperty("role", "danger")
+        theme.repolish(self.status_lbl_bridge)
+
+    @staticmethod
+    def _align(col):
+        h = Qt.AlignmentFlag.AlignRight if col in NUMERIC_COLUMNS else Qt.AlignmentFlag.AlignLeft
+        return h | Qt.AlignmentFlag.AlignVCenter
+
+    def _on_theme_changed(self):
+        for btn, icon_name, role in self._icon_buttons:
+            btn.setIcon(get_icon(icon_name, role))
+        for item, icon_name in self._category_icons:
+            item.setIcon(get_icon(icon_name))
+        self._hdr_check_state = None  # başlık kutucuğu yeni renkle yeniden çizilsin
+        self.refresh_table_data(force=True)
 
     def init_tray(self):
         self.tray = NovaTrayIcon(self)
@@ -366,50 +386,51 @@ class MainWindow(QMainWindow):
                     item_name.setText(t.filename)
                 item_name.setData(Qt.ItemDataRole.UserRole, t.id)
 
-                # 2: Boyut
-                tot_str = format_bytes(t.total_bytes) if t.total_bytes > 0 else (format_bytes(t.downloaded_bytes) if t.downloaded_bytes > 0 else "-")
-                self._set_cell(row, 2, tot_str)
+                active = t.status == "downloading"
+                in_progress = t.status in ("downloading", "paused") and 0 < t.downloaded_bytes < t.total_bytes
 
-                # 3: İlerleme Çubuğu
-                prog_widget = self.table.cellWidget(row, 3)
-                if not isinstance(prog_widget, QProgressBar):
-                    prog_widget = QProgressBar()
-                    prog_widget.setRange(0, 100)
-                    self.table.setCellWidget(row, 3, prog_widget)
-                prog_widget.setValue(int(t.percent))
+                # 2: Boyut — inen dosyada "indirilen / toplam"
+                if in_progress:
+                    size_str = f"{format_bytes(t.downloaded_bytes)} / {format_bytes(t.total_bytes)}"
+                elif t.total_bytes > 0:
+                    size_str = format_bytes(t.total_bytes)
+                else:
+                    size_str = format_bytes(t.downloaded_bytes) if t.downloaded_bytes > 0 else "–"
+                self._set_cell(row, 2, size_str, muted=True)
 
-                # 4: Hız
-                self._set_cell(row, 4, t.speed)
+                # 3: İlerleme (ince çubuk + yüzde, rengi duruma göre)
+                cell = self.table.cellWidget(row, 3)
+                if not isinstance(cell, ProgressCell):
+                    cell = ProgressCell()
+                    self.table.setCellWidget(row, 3, cell)
+                cell.set_progress(t.status, t.percent)
 
-                # 5: Kalan Süre
-                self._set_cell(row, 5, t.eta)
+                # 4-5: Hız ve kalan süre yalnızca inen satırda; aşama bilgisi Durum sütununa gider
+                stage, speed = split_stage_speed(t.speed) if active else ("", "")
+                self._set_cell(row, 4, speed, muted=True)
+                self._set_cell(row, 5, eta_text(t), muted=True)
 
                 # 6: Süre (yalnızca aktif indirme süresi, duraklatmalar hariç)
-                self._set_cell(row, 6, format_duration(t.elapsed()))
+                elapsed = format_duration(t.elapsed())
+                self._set_cell(row, 6, "" if elapsed == "-" else elapsed, muted=True)
 
-                # 7: Durum
-                status_tr = {
-                    "downloading": "İndiriliyor",
-                    "completed": "Tamamlandı",
-                    "paused": "Duraklatıldı",
-                    "queued": "Kuyrukta",
-                    "error": "Hata"
-                }.get(t.status, t.status.capitalize())
-                status_item = self._set_cell(row, 7, status_tr)
-                if status_item:
-                    if t.status == "error":
-                        status_item.setForeground(QColor("#f87171"))
-                        if t.error_message:
-                            status_item.setToolTip(f"Hata Nedeni: {t.error_message}")
-                    else:
-                        status_item.setForeground(QColor("#e4e6eb"))
-                        status_item.setToolTip("")
+                # 7: Durum — renkli nokta + metin; inerken aşama ("Ses 1/2 · TR") gösterilir
+                status_text = STATUS_LABELS.get(t.status, t.status.capitalize())
+                if active and stage:
+                    status_text = stage
+                elif t.status == "error" and t.error_message:
+                    status_text = f"Hata · {t.error_message.splitlines()[0][:60]}"
+                status_item = self._set_cell(row, 7, status_text)
+                status_item.setIcon(theme.status_dot(t.status))
+                status_item.setForeground(theme.color("danger" if t.status == "error" else "text"))
+                status_item.setToolTip(f"Hata nedeni: {t.error_message}" if t.status == "error" and t.error_message else "")
 
                 # 8: Kategori
-                self._set_cell(row, 8, t.category)
+                self._set_cell(row, 8, CATEGORY_LABELS.get(t.category, t.category), muted=True)
 
-                # 9: Tarih
-                self._set_cell(row, 9, t.created_at)
+                # 9: Eklenme
+                added = self._set_cell(row, 9, format_added(t.created_at), muted=True)
+                added.setToolTip(t.created_at or "")
 
                 # İlerleme penceresi açıksa güncelle
                 if t.id in self.progress_dialogs:
@@ -422,21 +443,27 @@ class MainWindow(QMainWindow):
         # Durum çubuğu: tüm aktif indirmelerin toplam hızı
         active = [t for t in self.queue_manager.snapshot() if t.status == "downloading"]
         total_bps = sum(getattr(t, "speed_bps", 0.0) or 0.0 for t in active)
-        self.status_lbl_speed.setText(f"Toplam Hız: {format_speed(total_bps)} ({len(active)} indirme)")
+        if active:
+            self.status_lbl_speed.setText(f"{len(active)} indirme · {format_speed(total_bps)}")
+        else:
+            self.status_lbl_speed.setText("Etkin indirme yok")
 
-    def _set_cell(self, row, col, text):
+    def _set_cell(self, row, col, text, muted=False):
         item = self.table.item(row, col)
         if not item:
             item = QTableWidgetItem(text)
+            item.setTextAlignment(self._align(col))
             self.table.setItem(row, col, item)
-        else:
+        elif item.text() != text:
             item.setText(text)
+        if muted:
+            item.setForeground(theme.color("text2"))
         return item
 
     def _save_column_widths(self):
         widths = [self.table.columnWidth(c) for c in range(self.table.columnCount())]
-        if widths != self.queue_manager.settings.get("column_widths"):
-            self.queue_manager.settings["column_widths"] = widths
+        if widths != self.queue_manager.settings.get("table_columns"):
+            self.queue_manager.settings["table_columns"] = widths
             self.queue_manager.save_settings()
 
     def _visible_task_ids(self):
@@ -537,12 +564,16 @@ class MainWindow(QMainWindow):
                 self._hdr_check_state = state
                 hdr.setIcon(get_icon(f"checkbox-{state}.svg"))
                 hdr.setToolTip("Seçimi kaldır" if all_checked else "Tümünü seç")
-        self.btn_select_all.setText("Seçimi Kaldır" if all_checked else "Tümünü Seç")
+        self.btn_select_all.setText("Seçimi kaldır" if all_checked else "Tümünü seç")
+        self.btn_select_all.setEnabled(bool(visible_ids))
 
         n = len(self.get_selected_task_ids())
-        self.btn_resume.setText(f"Devam Et ({n})" if n > 1 else "Devam Et")
+        self.btn_resume.setText(f"Devam et ({n})" if n > 1 else "Devam et")
         self.btn_pause.setText(f"Duraklat ({n})" if n > 1 else "Duraklat")
         self.btn_delete.setText(f"Sil ({n})" if n > 1 else "Sil")
+        # Seçim yokken eylemler pasif görünsün; tıklanınca bir şey olmayan buton yanıltıcı
+        for btn in (self.btn_resume, self.btn_pause, self.btn_delete):
+            btn.setEnabled(n > 0)
         self.status_lbl_selected.setText(f"{n} öğe seçili" if n > 0 else "")
 
     def get_selected_task_id_and_task(self):
@@ -712,19 +743,11 @@ class MainWindow(QMainWindow):
         msg_box.setText(title_text)
         msg_box.setInformativeText(info_text)
 
-        btn_delete_both = msg_box.addButton("Dosyayla Birlikte Sil", QMessageBox.ButtonRole.DestructiveRole)
-        btn_remove_only = msg_box.addButton("Yalnızca Listeden Kaldır", QMessageBox.ButtonRole.ActionRole)
+        btn_delete_both = msg_box.addButton("Dosyayla birlikte sil", QMessageBox.ButtonRole.DestructiveRole)
+        btn_remove_only = msg_box.addButton("Yalnızca listeden kaldır", QMessageBox.ButtonRole.ActionRole)
         btn_cancel = msg_box.addButton("İptal", QMessageBox.ButtonRole.RejectRole)
-
-        btn_delete_both.setStyleSheet(
-            "background-color: #991b1b; color: #fef2f2; border: 1px solid #dc2626; border-radius: 4px; padding: 6px 14px; font-weight: 600;"
-        )
-        btn_remove_only.setStyleSheet(
-            "background-color: #222631; color: #f0f3f6; border: 1px solid #2e3444; border-radius: 4px; padding: 6px 14px; font-weight: 600;"
-        )
-        btn_cancel.setStyleSheet(
-            "background-color: #1b1e27; color: #94a3b8; border: 1px solid #272c38; border-radius: 4px; padding: 6px 14px; font-weight: 600;"
-        )
+        # Geri alınamayan eylem kırmızı; diğerleri temanın standart butonu
+        btn_delete_both.setProperty("role", "danger")
         msg_box.setDefaultButton(btn_cancel)
 
         msg_box.exec()

@@ -2,6 +2,23 @@
 
 Bu projedeki tüm önemli değişiklikler bu dosyada belgelenir.
 
+## [v2.7.0] - 2026-11-22
+
+### Arayüz (`NovaStream-App/ui`)
+- **Tema sistemi (`ui/theme.py`):** Tüm renkler tek bir token tablosundan gelir (açık ve koyu); dağınık satır içi stiller ve eski `ui/styles.py` kaldırıldı. Uygulama sistemin açık/koyu ayarını izler (`QStyleHints.colorSchemeChanged`), Ayarlar → Görünüm'den sabitlenebilir (`theme` ayarı). İkon SVG'leri temaya göre yeniden renklendirilir.
+- **Ana pencere (`ui/main_window.py`, `ui/display.py`):** Duruma göre renklenen ince ilerleme çubuğu, durum noktası, aşama bilgisinin Durum sütununa taşınması, yalnızca inen satırda hız/kalan süre, `indirilen / toplam` boyut, Türkçe kategori adları, kısa eklenme zamanı; seçim yokken eylem butonları pasif. Sütun genişlikleri yeni `table_columns` ayarında saklanır.
+- **Pencereler:** İlerleme penceresi (`ui/progress_dialog.py`) yeniden düzenlendi, bağlantı haritası yalnızca parçalı indirmelerde gösterilir ve tema renklerini kullanır (`ui/chunk_visualizer.py`); ayarlar bölümlere ayrıldı (`ui/settings_dialog.py`); yeni indirme penceresi ve kurulum sihirbazı (`installer.py`) aynı tasarıma geçti.
+- **Erişilebilirlik:** Metin ve kontrol kontrastları WCAG eşiklerine göre seçildi (metin ≥ 4.5:1, kutucuk çerçevesi ≥ 3:1).
+
+### Video İndirme (`core/stream_handler.py`)
+- **Akış ölçümü:** Her akış (video, ses kanalları) için süre, boyut, parça, yeniden deneme ve HTTP 429 sayısı loga yazılır (`StreamStats`).
+- **Hız sınırlı sunucular:** Ölçümle görülen ~5 istek/sn sınırı nedeniyle HLS eşzamanlı parça sayısı 10 → 4, parça deneme hakkı 10 → 20.
+
+### Araçlar & CI
+- Windows konsolunda Türkçe karakter çıktısı çökmesi giderildi (`tools/sync_extensions.py`, `tools/package_extensions.py`); Linux CI'ya Qt sistem kütüphaneleri eklendi; zamanlamaya bağlı kuyruk testi kararlı hale getirildi.
+
+---
+
 ## [v2.6.0] - 2026-11-22
 
 ### Masaüstü Uygulaması (`NovaStream-App`)

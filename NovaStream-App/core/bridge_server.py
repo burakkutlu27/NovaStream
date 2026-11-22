@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from core.engine import choose_target_path, sanitize_filename
 
 PORT = 9191
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 ALLOWED_ORIGIN_PREFIXES = ("chrome-extension://", "moz-extension://", "extension://", "safari-web-extension://")
 MAX_BODY = 5 * 1024 * 1024
 

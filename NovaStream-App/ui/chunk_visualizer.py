@@ -1,18 +1,20 @@
 """
-NovaStream Çoklu Bağlantı (Chunk) Blok Görselleştirici
-Her bir paralel iş parçacığının indirdiği bayt bloklarını teknik hassasiyetle çizen bileşen.
+NovaStream bağlantı haritası: parçalı HTTP indirmesinde her bağlantının ilerlemesini çizer.
+Renkler ui/theme.py token'larından gelir.
 """
 
 from PyQt6.QtCore import Qt, QRectF
-from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont
+from PyQt6.QtGui import QPainter, QBrush, QPen
 from PyQt6.QtWidgets import QWidget
+
+from ui import theme
 
 
 class ChunkVisualizer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.segments = []
-        self.setMinimumHeight(84)
+        self.setMinimumHeight(72)
 
     def set_segments(self, segments_data):
         self.segments = segments_data or []
@@ -27,20 +29,17 @@ class ChunkVisualizer(QWidget):
 
         # Dış çerçeve
         bg_rect = QRectF(0, 0, w, h)
-        painter.setBrush(QColor(22, 24, 29))
-        painter.setPen(QPen(QColor(35, 37, 43), 1))
-        painter.drawRoundedRect(bg_rect, 4, 4)
+        painter.setBrush(theme.color("surface"))
+        painter.setPen(QPen(theme.color("border"), 1))
+        painter.drawRoundedRect(bg_rect.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
 
         if not self.segments:
-            painter.setPen(QColor(108, 114, 125))
-            font = QFont("Monospace")
-            font.setPointSize(9)
-            painter.setFont(font)
-            painter.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, "Tek Kanallı İndirme veya Akış Modu")
+            painter.setPen(theme.color("text3"))
+            painter.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, "Tek bağlantılı indirme")
             return
 
         num_segs = len(self.segments)
-        padding = 6
+        padding = 8
         avail_w = w - (2 * padding)
         avail_h = h - (2 * padding)
 
@@ -59,9 +58,8 @@ class ChunkVisualizer(QWidget):
         cell_w = (avail_w - (gap_x * (cols - 1))) / cols
         cell_h = (avail_h - (gap_y * (rows - 1))) / rows
 
-        font = QFont("Monospace")
-        font.setPointSize(8)
-        font.setBold(True)
+        font = painter.font()
+        font.setPointSizeF(max(7.0, font.pointSizeF() - 1.5))
         painter.setFont(font)
 
         for i, seg in enumerate(self.segments):
@@ -74,22 +72,28 @@ class ChunkVisualizer(QWidget):
             cell_rect = QRectF(x, y, cell_w, cell_h)
 
             # Hücre arka planı
-            painter.setBrush(QColor(31, 33, 39))
-            painter.setPen(QPen(QColor(42, 45, 53), 1))
-            painter.drawRoundedRect(cell_rect, 2, 2)
+            painter.setBrush(theme.color("track"))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(cell_rect, 3, 3)
 
             # Doluluk çubuğu
             pct = seg.get("percent", 0.0) / 100.0
             pct = max(0.0, min(1.0, pct))
             fill_w = cell_w * pct
 
+            label = f"{int(seg.get('percent', 0))} %"
+            painter.setPen(theme.color("text"))
+            painter.drawText(cell_rect, Qt.AlignmentFlag.AlignCenter, label)
+
+            # Dolgunun üstüne düşen kısım vurgu rengine uygun metin rengiyle yeniden çizilir;
+            # tek renk metin, dolu ve boş zeminin birinde okunaksız kalıyordu
             if fill_w > 0:
                 fill_rect = QRectF(x, y, fill_w, cell_h)
-                painter.setBrush(QBrush(QColor(37, 99, 235)))  # Solid Cobalt Blue
+                painter.save()
+                painter.setClipRect(fill_rect)
+                painter.setBrush(QBrush(theme.color("accent")))
+                painter.drawRoundedRect(fill_rect, 3, 3)
+                painter.setPen(theme.color("on_accent"))
+                painter.drawText(cell_rect, Qt.AlignmentFlag.AlignCenter, label)
+                painter.restore()
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRoundedRect(fill_rect, 2, 2)
-
-            # Metin
-            painter.setPen(QColor(228, 230, 235))
-            label = f"{i + 1}:{int(seg.get('percent', 0))}%"
-            painter.drawText(cell_rect, Qt.AlignmentFlag.AlignCenter, label)

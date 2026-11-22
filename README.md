@@ -1,7 +1,7 @@
 # NovaStream İndirme Yöneticisi
 
 [![CI](https://github.com/burakkutlu27/NovaStream/actions/workflows/ci.yml/badge.svg)](https://github.com/burakkutlu27/NovaStream/actions/workflows/ci.yml)
-![Sürüm](https://img.shields.io/badge/sürüm-v2.6.0-2563eb)
+![Sürüm](https://img.shields.io/badge/sürüm-v2.7.0-0e7f76)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0f172a)
 ![Lisans](https://img.shields.io/badge/lisans-MIT-10b981)
 
@@ -9,7 +9,7 @@
 
 ---
 
-## Özellikler (v2.6.0)
+## Özellikler (v2.7.0)
 
 - **Çok Kanallı Parçalı İndirme Motoru (`1–32` Bağlantı) & HTTP 429 Koruması:** HTTP `Range` istekleriyle dosyaları paralel parçalara böler, boşta kalan bağlantılara kalan işten parça aktarır; HTTP `429`/`503` hız sınırlarında `Retry-After` başlığına uyup bağlantı sayısını otomatik azaltarak kesintisiz devam eder.
 - **Gömülü Iframe Oynatıcı Uyumluluğu:** `webRequest.onBeforeSendHeaders` ile gerçek iframe `Referer`/`Origin` başlıklarını yakalar ve DNR üzerinden uygular. Master playlist içindeki ayrı ses ve altyazı alt listelerini sahte `[HD]` video olarak göstermeyi engeller; her akış için oynatıcı kaynak etiketini, çözünürlüğü, süreyi ve bit hızını net sunar.
@@ -17,6 +17,7 @@
 - **Masaüstü Listesinde Çoklu Seçim ve Tümünü Seçme:** Tablo içi onay kutuları (`☐`/`☑`), araç çubuğu **Tümünü Seç** düğmesi, `Ctrl+A`, `Ctrl+Tık`, `Shift+Tık`, `Delete` ve `Escape` kısayollarıyla toplu duraklatma, devam ettirme, URL kopyalama ve silme işlemleri.
 - **Paketli Eklenti Dağıtımı & Tarayıcı Algılama:** `.zip` ve `.xpi` eklenti paketleri üretilir (imzalı `.crx` yalnızca yerelde, özel anahtarla). Kurulum sihirbazı ve Ayarlar penceresi kurulu tarayıcıları (Chrome, Edge, Brave, Opera, Vivaldi, Chromium, Firefox, Firefox Dev, LibreWolf, Waterfox) algılayıp köprü kaydını yapar ve adım adım tek tıkla klasör/dosya rehberliği sunar.
 - **İndirme Süresi & Kişiselleştirilebilir Tablo:** Her indirmenin aktif süresi (duraklatmalar hariç) **Süre** sütununda ve ilerleme penceresinde gösterilir; tablo sütunları sürüklenerek genişletilebilir ve genişlikler hatırlanır. Uygulama sürümü pencere başlığında ve durum çubuğunda görünür.
+- **Açık ve Koyu Tema:** Arayüz Windows/Linux'un açık-koyu ayarını izler ve değişince anında güncellenir; Ayarlar → Görünüm'den sabitlenebilir. İlerleme çubuğu ve durum noktası indirme durumunu renkle gösterir; hız ve kalan süre yalnızca inen indirmede görünür.
 - **Güvenli Dosya Yönetimi & Yerel Köprü (`127.0.0.1:9191`):** İndirilen veri `.nspart` dosyasına yazılır, bitince asıl ada taşınır; mevcut dosyaların üzerine yazılmaz. Köprü sunucusu yalnızca tarayıcı eklenti kökenlerinden istek kabul eder.
 
 ---
@@ -41,7 +42,7 @@
 
 ### 1. Windows
 
-1. [GitHub Releases](https://github.com/burakkutlu27/NovaStream/releases) sayfasından **`NovaStream-Kurulum-v2.6.0.exe`** dosyasını indirip çalıştırın.
+1. [GitHub Releases](https://github.com/burakkutlu27/NovaStream/releases) sayfasından **`NovaStream-Kurulum-v2.7.0.exe`** dosyasını indirip çalıştırın.
    - Windows *"Bilinmeyen yayımcı"* uyarısı gösterirse **Ek bilgi → Yine de çalıştır** seçeneğini kullanın.
    - Gömülü Python ve FFmpeg paketlendiği için bilgisayarınızda ek kurulum gerektirmez.
 2. Kaynak koddan kurmak isterseniz:

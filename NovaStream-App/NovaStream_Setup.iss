@@ -4,7 +4,7 @@
 ; Sonra bu dosyayi Inno Setup Compiler ile derleyin. Kullanicinin bilgisayarinda Python gerekmez.
 
 #define MyAppName "NovaStream"
-#define MyAppVersion "2.6.0"
+#define MyAppVersion "2.7.0"
 #define MyAppPublisher "NovaStream"
 
 [Setup]
@@ -40,7 +40,9 @@ Source: "..\KULLANIM-KILAVUZU.txt"; DestDir: "{app}"; Flags: ignoreversion skipi
 Source: "core\*.py"; DestDir: "{app}\core"; Flags: ignoreversion
 Source: "ui\*.py"; DestDir: "{app}\ui"; Flags: ignoreversion
 Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "runtime\*"; DestDir: "{app}\runtime"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__"
+; PyQt6'nin QML/QtQuick dosyaları kullanılmıyor; en derin yolları (138 karakter) onlarda olduğu için
+; kurulum klasörü uzunsa Windows'un 260 karakter yol sınırını aşıp kurulumu yarıda kesiyordu
+Source: "runtime\*"; DestDir: "{app}\runtime"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,\Lib\site-packages\PyQt6\Qt6\qml"
 Source: "..\extension\native_host.py"; DestDir: "{app}\browser"; Flags: ignoreversion
 Source: "..\extension\native_host.bat"; DestDir: "{app}\browser"; Flags: ignoreversion
 Source: "..\extension\chrome\*"; DestDir: "{app}\browser\chrome"; Flags: ignoreversion recursesubdirs createallsubdirs

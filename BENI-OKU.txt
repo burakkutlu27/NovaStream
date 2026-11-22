@@ -1,5 +1,5 @@
 ================================================================================
-                  NovaStream İndirme Yöneticisi v2.6.0 - BENİ OKU
+                  NovaStream İndirme Yöneticisi v2.7.0 - BENİ OKU
 ================================================================================
 
 Bu rehber, tarayıcı eklentisinin kurulumu, otomatik algılama adımları ve

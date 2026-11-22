@@ -62,8 +62,8 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from core.bridge_server import BridgeServer  # noqa: E402
 from core.queue_manager import QueueManager  # noqa: E402
+from ui import theme  # noqa: E402
 from ui.main_window import MainWindow  # noqa: E402
-from ui.styles import MAIN_STYLESHEET  # noqa: E402
 
 INSTANCE_KEY = "NovaStream-" + (os.environ.get("USERNAME") or os.environ.get("USER") or "user")
 
@@ -101,9 +101,9 @@ def main():
     instance_server = QLocalServer()
     instance_server.listen(INSTANCE_KEY)
 
-    app.setStyleSheet(MAIN_STYLESHEET)
-
     queue_manager = QueueManager()
+    # Tema ayarı settings.json'da; pencere oluşturulmadan önce uygulanmalı
+    theme.apply(app, queue_manager.settings.get("theme", "system"))
     bridge_server = BridgeServer(queue_manager=queue_manager)
     bridge_server.start()
 

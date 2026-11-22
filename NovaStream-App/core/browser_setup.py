@@ -393,7 +393,7 @@ def auto_install_extensions(browser_dir, browsers=None):
                 entry["detail"] = f"about:debugging üzerinden {firefox_manifest} dosyasını yükleyin."
         else:
             crx_id = crx_info.get("crx_extension_id")
-            crx_version = crx_info.get("version") or "2.6.0"
+            crx_version = crx_info.get("version") or "2.7.0"
             if not IS_WINDOWS and chrome_crx and crx_id and b.get("ext_drop_dirs"):
                 placed = []
                 for drop_dir in b["ext_drop_dirs"]:

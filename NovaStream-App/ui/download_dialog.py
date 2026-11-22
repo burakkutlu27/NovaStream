@@ -1,19 +1,23 @@
 """
-NovaStream İndirme Onay ve Detay Penceresi (IDM Tarzı Yeni İndirme Modalı)
+NovaStream yeni indirme penceresi (adres, ad, klasör, kategori, video kalitesi).
 """
 
 import os
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFileDialog, QComboBox, QFrame, QCheckBox
 )
 from core.engine import get_default_download_dir
 from core.queue_manager import categorize_file, QUALITY_CHOICES
+from ui import theme
+from ui.display import CATEGORY_LABELS
 
-APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ICON_DIR = os.path.join(APP_DIR, "assets", "icons")
+
+def _caption(text):
+    lbl = QLabel(text)
+    lbl.setProperty("role", "muted")
+    return lbl
 
 
 class DownloadDialog(QDialog):
@@ -22,7 +26,7 @@ class DownloadDialog(QDialog):
 
     def __init__(self, download_info=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("NovaStream - İndirme Başlat")
+        self.setWindowTitle("NovaStream - Yeni indirme")
         self.setFixedWidth(540)
         self.setModal(True)
 
@@ -31,47 +35,49 @@ class DownloadDialog(QDialog):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(6)
+        layout.setContentsMargins(24, 22, 24, 20)
 
-        # Başlık ve Bilgi Kartı
-        header_lbl = QLabel("Yeni İndirme Ekle")
-        header_lbl.setStyleSheet("font-size: 15px; font-weight: 700; color: #f0f3f6;")
+        header_lbl = QLabel("Yeni indirme")
+        header_lbl.setProperty("role", "title")
         layout.addWidget(header_lbl)
+        layout.addSpacing(10)
 
         # URL
-        layout.addWidget(QLabel("İndirme Adresi (URL):"))
+        layout.addWidget(_caption("Adres"))
         self.url_input = QLineEdit(self.info.get("url", ""))
         self.url_input.setPlaceholderText("https://...")
         self.url_input.textChanged.connect(self.on_url_changed)
         layout.addWidget(self.url_input)
+        layout.addSpacing(8)
 
-        # Dosya Adı
-        layout.addWidget(QLabel("Dosya Adı:"))
+        layout.addWidget(_caption("Dosya adı"))
         self.filename_input = QLineEdit(self.info.get("title", ""))
         self.filename_input.setPlaceholderText("Boş bırakılırsa otomatik (videolarda video başlığı)")
         layout.addWidget(self.filename_input)
+        layout.addSpacing(8)
 
-        # Kayıt Yeri
-        layout.addWidget(QLabel("Kaydedilecek Klasör:"))
+        layout.addWidget(_caption("Kaydedilecek klasör"))
         dir_layout = QHBoxLayout()
         default_dir = self.info.get("destination_dir") or self.info.get("default_dir") or get_default_download_dir()
         self.dir_input = QLineEdit(default_dir)
-        self.dir_btn = QPushButton("Gözat...")
-        self.dir_btn.setIcon(QIcon(os.path.join(ICON_DIR, "folder.svg")))
-        self.dir_btn.setProperty("class", "tool-btn")
+        self.dir_btn = QPushButton("Gözat")
+        self.dir_btn.setIcon(theme.icon("folder.svg"))
         self.dir_btn.clicked.connect(self.browse_dir)
         dir_layout.addWidget(self.dir_input)
         dir_layout.addWidget(self.dir_btn)
         layout.addLayout(dir_layout)
+        layout.addSpacing(8)
 
-        # Kategori
         cat_layout = QHBoxLayout()
-        cat_layout.addWidget(QLabel("Kategori:"))
+        cat_layout.addWidget(_caption("Kategori"))
+        cat_layout.addStretch()
         self.cat_combo = QComboBox()
-        self.cat_combo.addItems(["Videos", "Music", "Compressed", "Documents", "Programs", "Others"])
+        self.cat_combo.setMinimumWidth(220)
+        for key, label in CATEGORY_LABELS.items():
+            self.cat_combo.addItem(label, key)
         cat = self.info.get("category") or categorize_file(self.filename_input.text(), self.info.get("isStream", False))
-        idx = self.cat_combo.findText(cat)
+        idx = self.cat_combo.findData(cat)
         if idx >= 0:
             self.cat_combo.setCurrentIndex(idx)
         cat_layout.addWidget(self.cat_combo)
@@ -79,8 +85,10 @@ class DownloadDialog(QDialog):
 
         # Video kalitesi (YouTube / akış / video siteleri)
         self.quality_row = QHBoxLayout()
-        self.quality_row.addWidget(QLabel("Video Kalitesi:"))
+        self.quality_row.addWidget(_caption("Video kalitesi"))
+        self.quality_row.addStretch()
         self.quality_combo = QComboBox()
+        self.quality_combo.setMinimumWidth(220)
         for key, label in QUALITY_CHOICES:
             self.quality_combo.addItem(label, key)
         q_idx = self.quality_combo.findData(self.info.get("quality") or self.info.get("default_quality") or "best")
@@ -96,26 +104,26 @@ class DownloadDialog(QDialog):
         if self.url_input.text() and not self.filename_input.text():
             self.on_url_changed(self.url_input.text())
 
-        # Çizgi
+        layout.addSpacing(12)
         sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #2b303c;")
+        sep.setProperty("role", "separator")
         layout.addWidget(sep)
+        layout.addSpacing(8)
 
         # Butonlar
         btn_layout = QHBoxLayout()
-        self.later_btn = QPushButton("Daha Sonra İndir")
-        self.later_btn.setIcon(QIcon(os.path.join(ICON_DIR, "clock.svg")))
+        self.later_btn = QPushButton("Sonra indir")
+        self.later_btn.setIcon(theme.icon("clock.svg"))
         self.later_btn.setProperty("class", "tool-btn")
         self.later_btn.clicked.connect(lambda: self.confirm_download(auto_start=False))
 
-        self.start_btn = QPushButton("Şimdi İndir")
-        self.start_btn.setIcon(QIcon(os.path.join(ICON_DIR, "download.svg")))
+        self.start_btn = QPushButton("Şimdi indir")
+        self.start_btn.setIcon(theme.icon("download.svg", "on_accent"))
+        self.start_btn.setDefault(True)
         self.start_btn.setProperty("class", "tool-btn-primary")
         self.start_btn.clicked.connect(lambda: self.confirm_download(auto_start=True))
 
         self.cancel_btn = QPushButton("İptal")
-        self.cancel_btn.setProperty("class", "tool-btn")
         self.cancel_btn.clicked.connect(self.reject)
 
         btn_layout.addWidget(self.later_btn)
@@ -151,7 +159,7 @@ class DownloadDialog(QDialog):
             if name:
                 self.filename_input.setText(name)
                 cat = categorize_file(name)
-                idx = self.cat_combo.findText(cat)
+                idx = self.cat_combo.findData(cat)
                 if idx >= 0:
                     self.cat_combo.setCurrentIndex(idx)
 
@@ -173,7 +181,7 @@ class DownloadDialog(QDialog):
             "quality": self.quality_combo.currentData() if is_video else None,
             "download_subtitles": bool(self.sub_chk.isChecked()) if is_video else False,
             "destination_dir": self.dir_input.text().strip() or get_default_download_dir(),
-            "category": self.cat_combo.currentText(),
+            "category": self.cat_combo.currentData(),
             "auto_start": auto_start,
             "is_stream": is_video and not is_youtube,
             "is_youtube": is_youtube,

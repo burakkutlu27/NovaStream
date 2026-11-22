@@ -21,7 +21,7 @@ from PyQt6.QtGui import QIcon, QPixmap  # noqa: E402
 from PyQt6.QtWidgets import (  # noqa: E402
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QStackedWidget, QWidget, QLineEdit, QFileDialog,
-    QCheckBox, QProgressBar, QMessageBox, QTextEdit
+    QCheckBox, QProgressBar, QMessageBox, QTextEdit, QFrame
 )
 
 from core.browser_setup import (  # noqa: E402
@@ -30,7 +30,7 @@ from core.browser_setup import (  # noqa: E402
     open_browser_extensions_page,
     reveal_path_in_file_manager,
 )
-from ui.styles import MAIN_STYLESHEET  # noqa: E402
+from ui import theme  # noqa: E402
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WINDOWS = sys.platform == "win32"
@@ -356,7 +356,6 @@ class InstallerWizard(QDialog):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        self.setStyleSheet(MAIN_STYLESHEET)
         self.init_ui()
 
     def init_ui(self):
@@ -365,27 +364,30 @@ class InstallerWizard(QDialog):
         layout.setSpacing(0)
 
         header = QWidget()
-        header.setStyleSheet("background-color: #0f172a; border-bottom: 1px solid #1e293b;")
+        header.setProperty("role", "bar")
         h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(20, 14, 20, 14)
+        h_layout.setContentsMargins(24, 16, 24, 16)
+        h_layout.setSpacing(12)
 
         logo_lbl = QLabel()
         logo_path = os.path.join(APP_DIR, "assets", "icon48.png")
         if os.path.exists(logo_path):
-            logo_lbl.setPixmap(QPixmap(logo_path).scaled(42, 42, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            logo_lbl.setPixmap(QPixmap(logo_path).scaled(36, 36, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         h_layout.addWidget(logo_lbl)
 
         title_box = QVBoxLayout()
-        t1 = QLabel("NovaStream İndirme Yöneticisi")
-        t1.setStyleSheet("font-size: 16px; font-weight: 800; color: #38bdf8;")
-        t2 = QLabel("Kurulum Sihirbazı (Linux & Windows)")
-        t2.setStyleSheet("font-size: 11px; color: #94a3b8;")
+        title_box.setSpacing(0)
+        t1 = QLabel("NovaStream")
+        t1.setProperty("role", "title")
+        t2 = QLabel("Kurulum")
+        t2.setProperty("role", "muted")
         title_box.addWidget(t1)
         title_box.addWidget(t2)
         h_layout.addLayout(title_box)
         h_layout.addStretch()
 
         layout.addWidget(header)
+        layout.addWidget(self._separator())
 
         self.stack = QStackedWidget()
         layout.addWidget(self.stack)
@@ -400,22 +402,24 @@ class InstallerWizard(QDialog):
         self.stack.addWidget(self.page_progress)  # 2
         self.stack.addWidget(self.page_finish)    # 3
 
+        layout.addWidget(self._separator())
         footer = QWidget()
-        footer.setStyleSheet("background-color: #0f172a; border-top: 1px solid #1e293b;")
+        footer.setProperty("role", "bar")
         f_layout = QHBoxLayout(footer)
-        f_layout.setContentsMargins(20, 12, 20, 12)
+        f_layout.setContentsMargins(24, 12, 24, 12)
+        f_layout.setSpacing(8)
 
-        self.btn_back = QPushButton("← Geri")
+        self.btn_back = QPushButton("Geri")
         self.btn_back.setProperty("class", "tool-btn")
         self.btn_back.clicked.connect(self.go_back)
         self.btn_back.setVisible(False)
 
-        self.btn_next = QPushButton("İleri →")
+        self.btn_next = QPushButton("İleri")
+        self.btn_next.setDefault(True)
         self.btn_next.setProperty("class", "tool-btn-primary")
         self.btn_next.clicked.connect(self.go_next)
 
         self.btn_cancel = QPushButton("İptal")
-        self.btn_cancel.setProperty("class", "tool-btn")
         self.btn_cancel.clicked.connect(self.reject)
 
         f_layout.addWidget(self.btn_back)
@@ -425,26 +429,35 @@ class InstallerWizard(QDialog):
 
         layout.addWidget(footer)
 
+    @staticmethod
+    def _separator():
+        sep = QFrame()
+        sep.setProperty("role", "separator")
+        return sep
+
+    @staticmethod
+    def _label(text, role):
+        lbl = QLabel(text)
+        lbl.setProperty("role", role)
+        return lbl
+
     def create_page_welcome(self):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.setContentsMargins(24, 20, 24, 20)
+        l.setContentsMargins(32, 28, 32, 24)
         l.setSpacing(12)
 
-        lbl = QLabel("NovaStream Kurulumuna Hoş Geldiniz")
-        lbl.setStyleSheet("font-size: 18px; font-weight: 700; color: #f8fafc;")
-        l.addWidget(lbl)
+        l.addWidget(self._label("NovaStream'i kuralım", "title"))
 
-        desc = QLabel(
-            "Bu sihirbaz, NovaStream İndirme Yöneticisi'ni bilgisayarınıza kuracak,\n"
-            "masaüstü kısayollarını hazırlayacak ve algılanan tarayıcılarla\n"
-            "köprü ve eklenti paketlerini otomatik olarak yapılandıracaktır.\n\n"
-            "• 16 Kanallı Turbo Dinamik İndirme Motoru (HTTP 429 Korumalı)\n"
-            "• YouTube 4K/8K, HLS, Rapidrame/Close ve Altyazı (SRT) Desteği\n"
-            "• Çoklu Seçim, Paketli Eklentiler (.xpi / .zip) ve Otomatik Algılama\n\n"
-            "Devam etmek için 'İleri' butonuna tıklayın."
+        desc = self._label(
+            "Bu sihirbaz NovaStream'i bilgisayarınıza kurar, kısayolları oluşturur ve "
+            "bulduğu tarayıcılara eklenti köprüsünü kaydeder.\n\n"
+            "• Parçalı indirme: dosyayı aynı anda 32 bağlantıya kadar böler, kesilirse kaldığı yerden sürer\n"
+            "• Video: YouTube, HLS akışları, çoklu ses kanalı ve altyazı (SRT)\n"
+            "• Tarayıcı eklentisi: sayfadaki videoyu ve dosyaları tek tıkla gönderir",
+            "muted",
         )
-        desc.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.5;")
+        desc.setWordWrap(True)
         l.addWidget(desc)
         l.addStretch()
         return w
@@ -452,42 +465,37 @@ class InstallerWizard(QDialog):
     def create_page_options(self):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.setContentsMargins(24, 16, 24, 16)
-        l.setSpacing(10)
+        l.setContentsMargins(32, 28, 32, 24)
+        l.setSpacing(8)
 
-        lbl = QLabel("Kurulum Ayarları")
-        lbl.setStyleSheet("font-size: 15px; font-weight: 700; color: #f8fafc;")
-        l.addWidget(lbl)
-
-        l.addWidget(QLabel("Kurulum Dizini:"))
+        l.addWidget(self._label("Kurulum seçenekleri", "title"))
+        l.addSpacing(6)
+        l.addWidget(self._label("Kurulum klasörü", "muted"))
         dir_box = QHBoxLayout()
         self.dir_input = QLineEdit(get_default_install_dir())
-        self.dir_btn = QPushButton("Gözat...")
-        self.dir_btn.setProperty("class", "tool-btn")
+        self.dir_btn = QPushButton("Gözat")
         self.dir_btn.clicked.connect(self.browse_dir)
         dir_box.addWidget(self.dir_input)
         dir_box.addWidget(self.dir_btn)
         l.addLayout(dir_box)
 
-        l.addSpacing(4)
-        l.addWidget(QLabel("Ek Seçenekler:"))
+        l.addSpacing(10)
 
-        self.chk_desktop = QCheckBox("Masaüstüne NovaStream kısayolu oluştur")
+        self.chk_desktop = QCheckBox("Masaüstüne kısayol oluştur")
         self.chk_desktop.setChecked(True)
         l.addWidget(self.chk_desktop)
 
-        self.chk_menu = QCheckBox("Uygulama / Başlat menüsüne kısayol ekle")
+        self.chk_menu = QCheckBox("Başlat / uygulama menüsüne ekle")
         self.chk_menu.setChecked(True)
         l.addWidget(self.chk_menu)
 
-        self.chk_browser = QCheckBox("Algılanan tarayıcılara köprü + eklenti paketlerini otomatik kur")
+        self.chk_browser = QCheckBox("Bulunan tarayıcılara eklenti köprüsünü kur")
         self.chk_browser.setChecked(True)
         l.addWidget(self.chk_browser)
 
-        detected_names = ", ".join(b["name"] for b in self.detected_browsers) if self.detected_browsers else "Yok (manuel yükleme gösterilecek)"
-        det_lbl = QLabel(f"Algılanan tarayıcılar: {detected_names}")
+        detected_names = ", ".join(b["name"] for b in self.detected_browsers) if self.detected_browsers else "bulunamadı (elle kurulum adımları gösterilecek)"
+        det_lbl = self._label(f"Bulunan tarayıcılar: {detected_names}", "caption")
         det_lbl.setWordWrap(True)
-        det_lbl.setStyleSheet("color: #38bdf8; font-size: 11.5px; padding-top: 4px;")
         l.addWidget(det_lbl)
 
         l.addStretch()
@@ -496,20 +504,20 @@ class InstallerWizard(QDialog):
     def create_page_progress(self):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.setContentsMargins(24, 30, 24, 30)
-        l.setSpacing(14)
+        l.setContentsMargins(32, 28, 32, 24)
+        l.setSpacing(10)
 
-        lbl = QLabel("NovaStream Kuruluyor...")
-        lbl.setStyleSheet("font-size: 16px; font-weight: 700; color: #f8fafc;")
-        l.addWidget(lbl)
+        l.addWidget(self._label("Kuruluyor", "title"))
 
-        self.status_lbl = QLabel("Dosyalar kopyalanıyor...")
-        self.status_lbl.setStyleSheet("color: #38bdf8;")
+        self.status_lbl = self._label("Dosyalar kopyalanıyor…", "muted")
         l.addWidget(self.status_lbl)
+        l.addSpacing(6)
 
         self.prog_bar = QProgressBar()
         self.prog_bar.setRange(0, 100)
         self.prog_bar.setValue(0)
+        self.prog_bar.setTextVisible(False)
+        self.prog_bar.setProperty("size", "large")
         l.addWidget(self.prog_bar)
 
         l.addStretch()
@@ -518,56 +526,46 @@ class InstallerWizard(QDialog):
     def create_page_finish(self):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.setContentsMargins(22, 18, 22, 14)
+        l.setContentsMargins(32, 28, 32, 20)
         l.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        check_icon_path = os.path.join(APP_DIR, "assets", "icons", "check.svg")
-        if os.path.exists(check_icon_path):
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(QIcon(check_icon_path).pixmap(24, 24))
-            header_layout.addWidget(icon_lbl)
-
-        lbl = QLabel("Kurulum Başarıyla Tamamlandı")
-        lbl.setStyleSheet("font-size: 17px; font-weight: 700; color: #10b981;")
-        header_layout.addWidget(lbl)
+        header_layout.setSpacing(8)
+        icon_lbl = QLabel()
+        icon_lbl.setPixmap(theme.icon("check.svg", "accent").pixmap(22, 22))
+        header_layout.addWidget(icon_lbl)
+        header_layout.addWidget(self._label("Kurulum tamamlandı", "title"))
         header_layout.addStretch()
         l.addLayout(header_layout)
 
         self.finish_desc = QTextEdit()
         self.finish_desc.setReadOnly(True)
-        self.finish_desc.setStyleSheet(
-            "background-color: #16181d; border: 1px solid #2d3038; border-radius: 5px; "
-            "padding: 8px; color: #cbd5e1; font-size: 12px;"
-        )
         self.finish_desc.setMinimumHeight(180)
         l.addWidget(self.finish_desc)
 
         btn_row = QHBoxLayout()
-        self.btn_open_chrome_dir = QPushButton("Chrome/Edge/Brave Klasörünü Göster")
-        self.btn_open_chrome_dir.setProperty("class", "tool-btn")
+        self.btn_open_chrome_dir = QPushButton("Chrome/Edge/Brave klasörünü göster")
         self.btn_open_chrome_dir.clicked.connect(self._reveal_chrome_dir)
         btn_row.addWidget(self.btn_open_chrome_dir)
 
-        self.btn_open_ff_file = QPushButton("Firefox Dosyasını Göster")
-        self.btn_open_ff_file.setProperty("class", "tool-btn")
+        self.btn_open_ff_file = QPushButton("Firefox dosyasını göster")
         self.btn_open_ff_file.clicked.connect(self._reveal_firefox_file)
         btn_row.addWidget(self.btn_open_ff_file)
         l.addLayout(btn_row)
 
         btn_row2 = QHBoxLayout()
-        self.btn_open_ext_page = QPushButton("Tarayıcı Uzantı Sayfasını Aç")
+        self.btn_open_ext_page = QPushButton("Tarayıcı uzantı sayfasını aç")
         self.btn_open_ext_page.setProperty("class", "tool-btn")
         self.btn_open_ext_page.clicked.connect(self._open_first_browser_page)
         btn_row2.addWidget(self.btn_open_ext_page)
 
-        self.btn_open_readme = QPushButton("BENİ OKU Rehberini Aç")
+        self.btn_open_readme = QPushButton("Kurulum rehberini aç")
         self.btn_open_readme.setProperty("class", "tool-btn")
         self.btn_open_readme.clicked.connect(self._open_readme)
         btn_row2.addWidget(self.btn_open_readme)
         l.addLayout(btn_row2)
 
-        self.chk_launch = QCheckBox("NovaStream'i Şimdi Başlat")
+        self.chk_launch = QCheckBox("NovaStream'i şimdi başlat")
         self.chk_launch.setChecked(True)
         l.addWidget(self.chk_launch)
 
@@ -711,6 +709,7 @@ def main():
     if "--silent" in sys.argv:
         sys.exit(run_silent(sys.argv))
     app = QApplication(sys.argv)
+    theme.apply(app, "system")
     wizard = InstallerWizard()
     wizard.show()
     sys.exit(app.exec())

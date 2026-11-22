@@ -222,7 +222,7 @@ def package_all(out_dir, key_path=DEFAULT_KEY_PATH, with_id_name=False, with_crx
     sync_extensions.main()
     with open(os.path.join(CHROME_EXT_DIR, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
-    version = manifest.get("version", "2.6.0")
+    version = manifest.get("version", "2.7.0")
 
     os.makedirs(out_dir, exist_ok=True)
 

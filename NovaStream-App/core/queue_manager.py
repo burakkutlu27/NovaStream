@@ -56,7 +56,10 @@ DEFAULT_SETTINGS = {
     "download_subtitles": False,
     "subtitle_langs": "tr,en",
     "last_ytdlp_update": 0,
-    "column_widths": [],                # ana tablo sütun genişlikleri (kullanıcı sürükleyerek ayarlar)
+    # Ana tablo sütun genişlikleri (kullanıcı sürükleyerek ayarlar). v2.6 tasarımında sütun düzeni
+    # değiştiği için eski "column_widths" yerine yeni anahtar; eski kayıt yüklenmez.
+    "table_columns": [],
+    "theme": "system",                  # "system" (Windows/Linux ayarını izler), "dark", "light"
 }
 
 

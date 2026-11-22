@@ -8,9 +8,8 @@ import sys
 import subprocess
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QApplication, QDialog, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QSpinBox, QCheckBox, QComboBox, QFileDialog,
     QTextEdit
 )
@@ -22,9 +21,21 @@ from core.browser_setup import (
 )
 from core.engine import get_default_download_dir
 from core.queue_manager import LOG_DIR, QUALITY_CHOICES
+from ui import theme
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ICON_DIR = os.path.join(APP_DIR, "assets", "icons")
+
+THEME_CHOICES = [
+    ("system", "Sistem ayarını izle"),
+    ("dark", "Koyu"),
+    ("light", "Açık"),
+]
+
+
+def _label(text, role):
+    lbl = QLabel(text)
+    lbl.setProperty("role", role)
+    return lbl
 
 COOKIE_CHOICES = [
     ("", "Kullanma (önerilen)"),
@@ -39,7 +50,7 @@ COOKIE_CHOICES = [
 class BrowserSetupDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("NovaStream - Tarayıcı Eklentisi Kurulumu")
+        self.setWindowTitle("NovaStream - Tarayıcı eklentisi")
         self.setMinimumWidth(560)
         self.browser_dir = self._resolve_browser_dir()
         self.browsers = detect_browsers()
@@ -57,11 +68,9 @@ class BrowserSetupDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(24, 22, 24, 20)
 
-        title = QLabel("Tarayıcı Algılama ve Eklenti Kurulumu")
-        title.setStyleSheet("font-size: 15px; font-weight: 700; color: #f0f3f6;")
-        layout.addWidget(title)
+        layout.addWidget(_label("Tarayıcı algılama ve eklenti kurulumu", "title"))
 
         summary_lines = [
             f"Native Messaging köprüsü kaydedildi ({len(self.result['native_registered'])} konum)."
@@ -86,17 +95,14 @@ class BrowserSetupDialog(QDialog):
         box.setReadOnly(True)
         box.setPlainText("\n".join(summary_lines))
         box.setMinimumHeight(210)
-        box.setStyleSheet("background-color: #16181d; border: 1px solid #2d3038; border-radius: 5px; padding: 8px; color: #cbd5e1;")
         layout.addWidget(box)
 
         btn_row1 = QHBoxLayout()
-        btn_chrome_dir = QPushButton("Chrome/Edge/Brave Klasörünü Göster")
-        btn_chrome_dir.setProperty("class", "tool-btn")
+        btn_chrome_dir = QPushButton("Chrome/Edge/Brave klasörünü göster")
         btn_chrome_dir.clicked.connect(lambda: reveal_path_in_file_manager(self._chrome_path()))
         btn_row1.addWidget(btn_chrome_dir)
 
-        btn_ff_file = QPushButton("Firefox Dosyasını Göster")
-        btn_ff_file.setProperty("class", "tool-btn")
+        btn_ff_file = QPushButton("Firefox dosyasını göster")
         btn_ff_file.clicked.connect(lambda: reveal_path_in_file_manager(self._firefox_manifest_path()))
         btn_row1.addWidget(btn_ff_file)
         layout.addLayout(btn_row1)
@@ -104,7 +110,7 @@ class BrowserSetupDialog(QDialog):
         if self.browsers:
             btn_row2 = QHBoxLayout()
             for b in self.browsers[:4]:
-                btn = QPushButton(f"{b['name']} Uzantılar")
+                btn = QPushButton(f"{b['name']} uzantıları")
                 btn.setProperty("class", "tool-btn")
                 btn.clicked.connect(lambda _chk=False, info=b: open_browser_extensions_page(info))
                 btn_row2.addWidget(btn)
@@ -132,32 +138,41 @@ class SettingsDialog(QDialog):
         self.queue_manager = queue_manager
         self.on_update_ytdlp = on_update_ytdlp
         self.setWindowTitle("NovaStream - Ayarlar")
-        self.setFixedWidth(540)
+        self.setFixedWidth(560)
         self.init_ui()
 
     def _row(self, layout, label, widget):
         row = QHBoxLayout()
         row.addWidget(QLabel(label))
         row.addStretch()
+        widget.setMinimumWidth(180)
         row.addWidget(widget)
         layout.addLayout(row)
+
+    @staticmethod
+    def _section(layout, text, first=False):
+        if not first:
+            layout.addSpacing(10)
+            sep = QFrame()
+            sep.setProperty("role", "separator")
+            layout.addWidget(sep)
+        layout.addWidget(_label(text, "section"))
 
     def init_ui(self):
         s = self.queue_manager.settings
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(8)
+        layout.setContentsMargins(24, 22, 24, 20)
 
-        title = QLabel("İndirme ve Motor Ayarları")
-        title.setStyleSheet("font-size: 15px; font-weight: 700; color: #f0f3f6;")
-        layout.addWidget(title)
+        layout.addWidget(_label("Ayarlar", "title"))
+        layout.addSpacing(4)
 
-        layout.addWidget(QLabel("Varsayılan İndirme Klasörü:"))
+        self._section(layout, "İndirme", first=True)
+        layout.addWidget(_label("Varsayılan indirme klasörü", "muted"))
         dir_layout = QHBoxLayout()
         self.dir_input = QLineEdit(s.get("download_dir") or get_default_download_dir())
-        self.dir_btn = QPushButton("Gözat...")
-        self.dir_btn.setIcon(QIcon(os.path.join(ICON_DIR, "folder.svg")))
-        self.dir_btn.setProperty("class", "tool-btn")
+        self.dir_btn = QPushButton("Gözat")
+        self.dir_btn.setIcon(theme.icon("folder.svg"))
         self.dir_btn.clicked.connect(self.browse_dir)
         dir_layout.addWidget(self.dir_input)
         dir_layout.addWidget(self.dir_btn)
@@ -166,75 +181,85 @@ class SettingsDialog(QDialog):
         self.conn_spin = QSpinBox()
         self.conn_spin.setRange(1, 32)
         self.conn_spin.setValue(self.queue_manager.default_connections)
-        self._row(layout, "Dosya başına bağlantı sayısı (1-32):", self.conn_spin)
+        self._row(layout, "Dosya başına bağlantı (1–32)", self.conn_spin)
 
         self.limit_spin = QSpinBox()
         self.limit_spin.setRange(1, 10)
         self.limit_spin.setValue(self.queue_manager.max_concurrent)
-        self._row(layout, "Aynı anda en fazla indirme (1-10):", self.limit_spin)
+        self._row(layout, "Aynı anda en fazla indirme (1–10)", self.limit_spin)
+
+        self._section(layout, "Video")
 
         self.quality_combo = QComboBox()
         for key, label in QUALITY_CHOICES:
             self.quality_combo.addItem(label, key)
         idx = self.quality_combo.findData(s.get("default_quality", "best"))
         self.quality_combo.setCurrentIndex(max(0, idx))
-        self._row(layout, "Varsayılan video kalitesi:", self.quality_combo)
+        self._row(layout, "Varsayılan kalite", self.quality_combo)
 
-        self.sub_chk = QCheckBox("Videolarla birlikte altyazıları otomatik indir (yt-dlp → SRT)")
+        self.sub_chk = QCheckBox("Altyazıları da indir (SRT)")
         self.sub_chk.setChecked(bool(s.get("download_subtitles")))
         layout.addWidget(self.sub_chk)
 
         self.sub_langs_input = QLineEdit(s.get("subtitle_langs") or "tr,en")
-        self.sub_langs_input.setMaximumWidth(180)
         self.sub_langs_input.setPlaceholderText("tr,en")
-        self._row(layout, "Altyazı dilleri (ör. tr,en):", self.sub_langs_input)
+        self._row(layout, "Altyazı dilleri", self.sub_langs_input)
 
         self.yt_cookie_combo = QComboBox()
         for key, label in COOKIE_CHOICES:
             self.yt_cookie_combo.addItem(label, key)
         idx = self.yt_cookie_combo.findData(s.get("cookie_browser", ""))
         self.yt_cookie_combo.setCurrentIndex(max(0, idx))
-        self._row(layout, "YouTube oturum çerezi (yaş sınırlı videolar):", self.yt_cookie_combo)
+        self._row(layout, "YouTube çerezi (yaş sınırlı videolar)", self.yt_cookie_combo)
         if sys.platform == "win32":
-            note = QLabel("Not: Windows'ta Chrome/Edge açıkken çerezleri okunamaz; Firefox önerilir.")
-            note.setStyleSheet("color: #94a3b8; font-size: 11px;")
-            layout.addWidget(note)
+            layout.addWidget(_label("Windows'ta Chrome/Edge açıkken çerezleri okunamaz; Firefox önerilir.", "caption"))
 
-        self.confirm_chk = QCheckBox("Tarayıcı eklentisinden gelen indirmeler için onay penceresi göster")
+        self._section(layout, "Tarayıcı ve sistem")
+
+        self.confirm_chk = QCheckBox("Eklentiden gelen indirmeler için onay sor")
         self.confirm_chk.setChecked(bool(s.get("confirm_extension_downloads")))
         layout.addWidget(self.confirm_chk)
 
-        self.clipboard_chk = QCheckBox("Panoya kopyalanan indirme linklerini yakala ve sor")
+        self.clipboard_chk = QCheckBox("Panoya kopyalanan indirme linklerini yakala")
         self.clipboard_chk.setChecked(bool(s.get("clipboard_monitor")))
         layout.addWidget(self.clipboard_chk)
 
-        self.tray_chk = QCheckBox("Pencere kapatılınca sistem tepsisinde çalışmaya devam et")
+        self.tray_chk = QCheckBox("Pencere kapanınca sistem tepsisinde çalışmaya devam et")
         self.tray_chk.setChecked(bool(s.get("minimize_to_tray", True)))
         layout.addWidget(self.tray_chk)
 
+        self._section(layout, "Görünüm")
+        self.theme_combo = QComboBox()
+        for key, label in THEME_CHOICES:
+            self.theme_combo.addItem(label, key)
+        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(s.get("theme", "system"))))
+        self._row(layout, "Tema", self.theme_combo)
+
+        self._section(layout, "Bakım")
         tools = QHBoxLayout()
-        self.update_btn = QPushButton("yt-dlp'yi şimdi güncelle")
-        self.update_btn.setProperty("class", "tool-btn")
+        tools.setSpacing(8)
+        self.update_btn = QPushButton("yt-dlp'yi güncelle")
         self.update_btn.clicked.connect(self._update_clicked)
         self.update_btn.setEnabled(self.on_update_ytdlp is not None)
-        self.browser_setup_btn = QPushButton("Tarayıcı Eklentisini Kur / Yenile")
-        self.browser_setup_btn.setProperty("class", "tool-btn")
+        self.browser_setup_btn = QPushButton("Tarayıcı eklentisini kur")
         self.browser_setup_btn.clicked.connect(self.open_browser_setup)
-        self.logs_btn = QPushButton("Log klasörünü aç")
-        self.logs_btn.setProperty("class", "tool-btn")
+        self.logs_btn = QPushButton("Kayıtları aç")
+        self.logs_btn.setToolTip(LOG_DIR)
         self.logs_btn.clicked.connect(self.open_logs)
         tools.addWidget(self.update_btn)
         tools.addWidget(self.browser_setup_btn)
         tools.addWidget(self.logs_btn)
         tools.addStretch()
         layout.addLayout(tools)
+        layout.addSpacing(16)
 
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
         self.save_btn = QPushButton("Kaydet")
         self.save_btn.setProperty("class", "tool-btn-primary")
         self.save_btn.clicked.connect(self.save)
+        self.save_btn.setDefault(True)
         self.cancel_btn = QPushButton("İptal")
-        self.cancel_btn.setProperty("class", "tool-btn")
         self.cancel_btn.clicked.connect(self.reject)
         btn_layout.addStretch()
         btn_layout.addWidget(self.cancel_btn)
@@ -276,5 +301,12 @@ class SettingsDialog(QDialog):
         s["confirm_extension_downloads"] = self.confirm_chk.isChecked()
         s["clipboard_monitor"] = self.clipboard_chk.isChecked()
         s["minimize_to_tray"] = self.tray_chk.isChecked()
+        new_theme = self.theme_combo.currentData()
+        theme_changed = new_theme != s.get("theme", "system")
+        s["theme"] = new_theme
         self.queue_manager.save_settings()
+        if theme_changed:
+            app = QApplication.instance()
+            if app is not None:
+                theme.apply(app, new_theme)
         self.accept()
