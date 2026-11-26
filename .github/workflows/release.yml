@@ -30,8 +30,9 @@ jobs:
           want="${RELEASE_TAG#v}"
           chrome=$(python -c "import json;print(json.load(open('extension/chrome/manifest.json',encoding='utf-8'))['version'])")
           firefox=$(python -c "import json;print(json.load(open('extension/firefox/manifest.json',encoding='utf-8'))['version'])")
-          iss=$(sed -n 's/^#define MyAppVersion "\(.*\)"/\1/p' NovaStream-App/NovaStream_Setup.iss)
-          app=$(sed -n 's/^APP_VERSION = "\(.*\)"/\1/p' NovaStream-App/core/bridge_server.py)
+          # .gitattributes .iss'i CRLF ile checkout ettirir; sed satır sonundaki \r'yi de yakalar
+          iss=$(sed -n 's/^#define MyAppVersion "\(.*\)"/\1/p' NovaStream-App/NovaStream_Setup.iss | tr -d '\r')
+          app=$(sed -n 's/^APP_VERSION = "\(.*\)"/\1/p' NovaStream-App/core/bridge_server.py | tr -d '\r')
           echo "etiket=$want chrome=$chrome firefox=$firefox iss=$iss app=$app"
           for v in "$chrome" "$firefox" "$iss" "$app"; do
             if [ "$v" != "$want" ]; then
